@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/api/groups/submit", "destination": "/api/groups/submit" },
+    { "source": "/api/groups", "destination": "/api/groups/index" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "whatsapp-otp-group",
+  "version": "1.0.0",
+  "dependencies": {
+    "pg": "^8.13.3",
+    "@vercel/node": "^5.0.2"
+  }
+}
