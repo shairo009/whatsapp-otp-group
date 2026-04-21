@@ -286,11 +286,14 @@ function cleanCandidateName(raw: string | null | undefined): string | null {
   s = s.replace(/^\s*whatsapp(?:\s+group)?(?:\s+invite)?\s*[:\-|·•–—]\s*/i, "").trim();
   if (!s) return null;
   if (GENERIC_TITLES.has(s.toLowerCase().trim())) return null;
-  // Reject if too short or just punctuation. IMPORTANT: count UNICODE letters
-  // and digits, not just ASCII \w — otherwise stylized names made entirely of
-  // fancy unicode chars (🅡🅐🅙 🅞🅣🅟, 𝐎𝐓𝐏, ОТР, ⓞⓣⓟ, etc.) would be
-  // wrongly rejected because every character is "non-word" in ASCII regex.
-  const letterCount = (s.match(/[\p{L}\p{N}]/gu) || []).length;
+  // Reject if too short or just punctuation. IMPORTANT: many fancy unicode
+  // chars (🅡🅐🅙, 🅾🆃🅿, ❶❷❸ …) are categorized as "Symbol" not "Letter",
+  // so \p{L} alone misses them. Normalize to ASCII first, THEN count, so
+  // stylized names like "🅡🅐🅙 🅞🅣🅟", "𝐎𝐓𝐏", "ОТР", "ⓞⓣⓟ" survive.
+  const normalized = normalizeFancy(s);
+  const letterCount =
+    (normalized.match(/[A-Za-z0-9]/g) || []).length +
+    (s.match(/[\p{L}\p{N}]/gu) || []).length;
   if (letterCount < 2) return null;
   return s;
 }
