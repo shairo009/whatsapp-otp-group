@@ -362,9 +362,19 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
       const ogDescription = metaContent(html, "og:description");
       const hasMembers = detectHasMembers(html, ogDescription);
 
-      // No metadata at all → broken link (hard).
+      // No metadata at all → suspicious, but DON'T hard-remove. WhatsApp
+      // sometimes serves an empty preview for healthy groups (UA detection,
+      // geo blips, A/B tests). Treat as soft-broken so the cron grace
+      // window can decide.
       if (!ogTitle && !ogImage) {
-        return { ok: false, name: null, imageUrl: null, reason: "No group preview available" };
+        return {
+          ok: false,
+          name: null,
+          imageUrl: null,
+          reason: "No group preview available",
+          softBroken: true,
+          hasMembers: false,
+        };
       }
 
       const titleIsGeneric =
