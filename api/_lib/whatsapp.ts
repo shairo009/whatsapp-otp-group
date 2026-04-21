@@ -172,6 +172,15 @@ function normalizeFancy(s: string): string {
   return out;
 }
 
+// Canonical form of a group name used for "is this the same group?"
+// comparisons. Normalizes fancy unicode, strips invisible chars, lowercases,
+// and removes ALL non-alphanumerics so "O̶ T̶ P̶ Group", "𝐎𝐓𝐏  group",
+// "OTP-Group" and "ОТР group" all collapse to the same key.
+export function normalizeName(name: string | null | undefined): string {
+  if (!name) return "";
+  return normalizeFancy(name).toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
 export function nameContainsOTP(name: string | null | undefined): boolean {
   if (!name) return false;
   const normalized = normalizeFancy(name).toLowerCase();
