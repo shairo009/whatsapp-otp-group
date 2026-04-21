@@ -21,14 +21,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const client = await getPool().connect();
   try {
     const totalRes = await client.query(
-      "SELECT COUNT(*)::int AS c FROM groups WHERE status = 'approved'"
+      "SELECT COUNT(*)::int AS c FROM groups WHERE status IN ('approved','pending')"
     );
     const total = totalRes.rows[0].c as number;
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     const result = await client.query(
       `SELECT id, link, description, name, image_url, status, created_at
-       FROM groups WHERE status = 'approved'
+       FROM groups WHERE status IN ('approved','pending')
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
