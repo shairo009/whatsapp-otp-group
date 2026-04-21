@@ -4,6 +4,7 @@ import {
   fetchGroupPreview,
   isValidWhatsAppLink,
   extractWhatsAppLinks,
+  nameContainsOTP,
 } from "../_lib/whatsapp";
 
 const MAX_LINKS = 40;
@@ -36,15 +37,19 @@ async function processOne(
     return { link, status: "failed", reason: preview.reason || "Link not working" };
   }
 
-  // Only accept groups whose name mentions "OTP". If the group name is known
-  // and does not contain "otp", reject. If rate-limited (name unknown), let it
-  // through as pending — the verify cron will recheck and remove if not OTP.
-  if (preview.name && !/otp/i.test(preview.name)) {
-    return {
-      link,
-      status: "failed",
-      reason: "Only OTP groups are allowed (group name must contain 'OTP')",
-    };
+  // Strict OTP-only policy:
+  // - If WhatsApp gave us a name, it MUST contain "otp".
+  // - If we couldn't read a name (null) AND we weren't rate-limited, reject —
+  //   we can't verify, so we don't let unknown groups in.
+  // - If rate-limited, allow as pending; the verify cron will enforce OTP later.
+  if (!preview.rateLimited) {
+    if (!preview.name || !nameContainsOTP(preview.name)) {
+      return {
+        link,
+        status: "failed",
+        reason: "Only OTP groups are allowed (group name must contain 'OTP')",
+      };
+    }
   }
 
   const client = await getPool().connect();
