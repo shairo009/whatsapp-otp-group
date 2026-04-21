@@ -121,6 +121,18 @@ function mapFancyChar(cp: number): string | null {
   // Enclosed Alphanumerics: Ⓐ..Ⓩ (U+24B6..U+24CF), ⓐ..ⓩ (U+24D0..U+24E9)
   if (cp >= 0x24b6 && cp <= 0x24cf) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x24b6));
   if (cp >= 0x24d0 && cp <= 0x24e9) return String.fromCharCode("a".charCodeAt(0) + (cp - 0x24d0));
+  // Enclosed Alphanumeric Supplement (emoji-style boxed/circled letters):
+  //   🄐..🄩  Parenthesized Latin Capital Letter A..Z   (U+1F110..U+1F129)
+  //   🄰..🅉  Squared Latin Capital Letter A..Z         (U+1F130..U+1F149)
+  //   🅐..🅩  Negative Circled Latin Capital Letter A..Z (U+1F150..U+1F169)
+  //   🅰..🆉  Negative Squared Latin Capital Letter A..Z (U+1F170..U+1F189)
+  if (cp >= 0x1f110 && cp <= 0x1f129) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f110));
+  if (cp >= 0x1f130 && cp <= 0x1f149) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f130));
+  if (cp >= 0x1f150 && cp <= 0x1f169) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f150));
+  if (cp >= 0x1f170 && cp <= 0x1f189) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f170));
+  // Keycap digits 0..9 with U+20E3 combining mark (e.g. 1️⃣). The digit
+  // itself comes through fine; the keycap suffix gets stripped by the
+  // combining-mark removal in normalizeFancy. No mapping needed here.
   // Fullwidth Latin: A..Z (U+FF21..U+FF3A), a..z (U+FF41..U+FF5A), 0..9 (U+FF10..U+FF19)
   if (cp >= 0xff21 && cp <= 0xff3a) return String.fromCharCode("A".charCodeAt(0) + (cp - 0xff21));
   if (cp >= 0xff41 && cp <= 0xff5a) return String.fromCharCode("a".charCodeAt(0) + (cp - 0xff41));
