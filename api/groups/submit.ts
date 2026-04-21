@@ -7,7 +7,7 @@ import {
 } from "../_lib/whatsapp";
 
 const MAX_LINKS = 40;
-const CONCURRENCY = 5;
+const CONCURRENCY = 2;
 
 type ResultItem = {
   link: string;
@@ -28,7 +28,11 @@ async function processOne(
   }
 
   const preview = await fetchGroupPreview(link);
-  if (!preview.ok) {
+
+  // Hard fail only when the link is definitively bad. If WhatsApp rate-limited
+  // us (429) or returned a transient server error, accept the link as pending
+  // — the verify cron will revalidate it later.
+  if (!preview.ok && !preview.rateLimited) {
     return { link, status: "failed", reason: preview.reason || "Link not working" };
   }
 
@@ -60,6 +64,9 @@ async function processOne(
       id: r.id,
       name: r.name ?? null,
       imageUrl: r.image_url ?? null,
+      reason: preview.rateLimited
+        ? "Saved as pending — WhatsApp rate-limited verification, will retry automatically."
+        : undefined,
     };
   } catch (err: any) {
     return { link, status: "failed", reason: err?.message || "DB error" };
