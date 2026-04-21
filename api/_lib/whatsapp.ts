@@ -65,10 +65,32 @@ function decodeHtml(s: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
+// Cyrillic / Greek homoglyphs that look identical to Latin letters. Users
+// love these for "OTP" group names because they bypass naive substring
+// matching: e.g. "ОТР" (Cyrillic O, T, R/P-lookalike) renders the same as
+// "OTP" in WhatsApp.
+const HOMOGLYPHS: Record<string, string> = {
+  // Cyrillic uppercase
+  "\u0410": "A", "\u0412": "B", "\u0415": "E", "\u041A": "K", "\u041C": "M",
+  "\u041D": "H", "\u041E": "O", "\u0420": "P", "\u0421": "C", "\u0422": "T",
+  "\u0425": "X", "\u0406": "I", "\u0408": "J", "\u0405": "S", "\u04AE": "Y",
+  // Cyrillic lowercase
+  "\u0430": "a", "\u0435": "e", "\u043A": "k", "\u043E": "o", "\u0440": "p",
+  "\u0441": "c", "\u0445": "x", "\u0443": "y", "\u0456": "i", "\u0458": "j",
+  "\u0455": "s",
+  // Greek uppercase
+  "\u0391": "A", "\u0392": "B", "\u0395": "E", "\u0396": "Z", "\u0397": "H",
+  "\u0399": "I", "\u039A": "K", "\u039C": "M", "\u039D": "N", "\u039F": "O",
+  "\u03A1": "P", "\u03A4": "T", "\u03A5": "Y", "\u03A7": "X",
+  // Greek lowercase
+  "\u03BF": "o", "\u03C1": "p", "\u03C4": "t",
+};
+
 // Map a single fancy/styled unicode character to its plain ASCII equivalent
 // when possible. Covers Mathematical Alphanumeric Symbols, Enclosed
-// Alphanumerics, Fullwidth Latin, and a few other ranges users love to use
-// for stylized group names like 𝐎𝐓𝐏 / Ⓞⓣⓟ / OTP.
+// Alphanumerics, Fullwidth Latin, Negative Squared/Circled letters, Cyrillic/
+// Greek homoglyphs and several other ranges users love to use for stylized
+// group names like 𝐎𝐓𝐏 / Ⓞⓣⓟ / 🅾🆃🅿 / ОТР / OTP.
 function mapFancyChar(cp: number): string | null {
   // Mathematical Alphanumeric Symbols (U+1D400..U+1D7FF)
   if (cp >= 0x1d400 && cp <= 0x1d7ff) {
@@ -107,16 +129,39 @@ function mapFancyChar(cp: number): string | null {
   if (cp >= 0x249c && cp <= 0x24b5) return String.fromCharCode("a".charCodeAt(0) + (cp - 0x249c));
   // Regional indicators: 🇦..🇿 (U+1F1E6..U+1F1FF) → A..Z
   if (cp >= 0x1f1e6 && cp <= 0x1f1ff) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f1e6));
+  // Squared Latin Letters: 🄰..🅉 (U+1F130..U+1F149) → A..Z
+  if (cp >= 0x1f130 && cp <= 0x1f149) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f130));
+  // Negative Squared Latin Letters: 🅰..🆉 (U+1F170..U+1F189) → A..Z
+  if (cp >= 0x1f170 && cp <= 0x1f189) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f170));
+  // Negative Circled Latin Letters: 🅐..🅩 (U+1F150..U+1F169) → A..Z
+  if (cp >= 0x1f150 && cp <= 0x1f169) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f150));
+  // Circled Latin small: ⓐ already handled in 24D0; also small from U+24D0..U+24E9 done above
+  // Tag characters: U+E0020..U+E007E → printable ASCII
+  if (cp >= 0xe0020 && cp <= 0xe007e) return String.fromCharCode(cp - 0xe0000);
+  // Cyrillic / Greek homoglyphs
+  const ch = String.fromCodePoint(cp);
+  if (HOMOGLYPHS[ch]) return HOMOGLYPHS[ch];
   return null;
 }
 
+// Invisible / format characters that users sprinkle into stylized names to
+// break naive substring matching. Strip these BEFORE running the OTP regex.
+// Includes: ZWSP, ZWNJ, ZWJ, BOM, word joiner, soft hyphen, variation
+// selectors (FE00-FE0F), and bidi controls.
+const INVISIBLE_RE =
+  /[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2064\u206A-\u206F\uFEFF\uFE00-\uFE0F]/g;
+
 function normalizeFancy(s: string): string {
-  // First pass: try Unicode NFKD (handles many compatibility forms cheaply).
-  let pre: string;
+  // Strip invisible / zero-width / variation-selector chars first so they
+  // don't survive into the OTP regex check.
+  let pre = s.replace(INVISIBLE_RE, "");
+  // Unicode NFKD (handles many compatibility forms cheaply) + strip combining
+  // marks (U+0300..U+036F) which include strikethrough (U+0336), underline,
+  // accents and the like.
   try {
-    pre = s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    pre = pre.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
   } catch {
-    pre = s;
+    /* ignore */
   }
   let out = "";
   for (const ch of pre) {
@@ -130,9 +175,15 @@ function normalizeFancy(s: string): string {
 export function nameContainsOTP(name: string | null | undefined): boolean {
   if (!name) return false;
   const normalized = normalizeFancy(name).toLowerCase();
-  // Match "otp" anywhere, with or without separators (otp, o.t.p, o-t-p, o t p)
+  // Match "otp" anywhere, with or without common separators between the
+  // letters (otp, o.t.p, o-t-p, o t p, o*t*p, o/t/p, o|t|p, o:t:p, etc.).
   if (/otp/.test(normalized)) return true;
-  if (/o[\s._\-*]?t[\s._\-*]?p/.test(normalized)) return true;
+  if (/o[\s._\-*\/|:~+=]?t[\s._\-*\/|:~+=]?p/.test(normalized)) return true;
+  // Last-resort: collapse ALL non-alphanumeric chars and look for "otp" in
+  // the residue. This catches names like "✦O✦T✦P✦", "⟨O⟩⟨T⟩⟨P⟩",
+  // "★O★T★P★", emoji-separated, bracket-separated, etc.
+  const stripped = normalized.replace(/[^a-z0-9]+/g, "");
+  if (stripped.includes("otp")) return true;
   return false;
 }
 
