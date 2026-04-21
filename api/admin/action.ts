@@ -16,7 +16,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (action === "approve") {
       const r = await client.query(
-        "UPDATE groups SET status = 'approved' WHERE id = $1 RETURNING id",
+        `UPDATE groups
+           SET status = 'approved',
+               removed_reason = NULL,
+               removed_at = NULL,
+               broken_since = NULL
+         WHERE id = $1 RETURNING id`,
         [Number(groupId)]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: "Group not found" });
@@ -30,9 +35,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ ok: true });
     }
     if (action === "remove") {
+      const reason: string =
+        (req.body?.reason && String(req.body.reason).trim().slice(0, 300)) ||
+        "Removed by admin";
       const r = await client.query(
-        "UPDATE groups SET status = 'removed' WHERE id = $1 RETURNING id",
-        [Number(groupId)]
+        `UPDATE groups
+           SET status = 'removed',
+               removed_reason = $2,
+               removed_at = NOW()
+         WHERE id = $1 RETURNING id`,
+        [Number(groupId), reason]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: "Group not found" });
       return res.json({ ok: true });
@@ -76,10 +88,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         groupsAffected.push({ kept: keep.id, removed: removedIds, name: keep.name });
       }
       if (toRemove.length > 0) {
-        await client.query(
-          `UPDATE groups SET status = 'removed' WHERE id = ANY($1::int[])`,
-          [toRemove]
-        );
+        // Build a per-id reason map so each removed entry knows which
+        // group it was a duplicate of.
+        for (const g of groupsAffected) {
+          await client.query(
+            `UPDATE groups
+               SET status = 'removed',
+                   removed_reason = $2,
+                   removed_at = NOW()
+             WHERE id = ANY($1::int[])`,
+            [g.removed, `Duplicate of group #${g.kept}${g.name ? ` ("${g.name}")` : ""}`]
+          );
+        }
       }
       return res.json({
         ok: true,
