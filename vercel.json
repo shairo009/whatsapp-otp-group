@@ -12,6 +12,6 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/cron/verify", "schedule": "0 3 */5 * *" }
+    { "path": "/api/cron/verify", "schedule": "0 * * * *" }
   ]
 }
