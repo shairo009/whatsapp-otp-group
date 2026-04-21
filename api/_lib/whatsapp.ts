@@ -136,6 +136,59 @@ export function nameContainsOTP(name: string | null | undefined): boolean {
   return false;
 }
 
+// Strip WhatsApp branding noise from a candidate name string. Returns null if
+// nothing meaningful remains.
+function cleanCandidateName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let s = decodeHtml(raw).replace(/\s+/g, " ").trim();
+  // Strip surrounding quotes
+  s = s.replace(/^["'\u201C\u201D\u2018\u2019]+|["'\u201C\u201D\u2018\u2019]+$/g, "").trim();
+  // Strip common suffix/prefix patterns WhatsApp adds:
+  //   "GroupName | WhatsApp"   "GroupName - WhatsApp"   "GroupName · WhatsApp"
+  //   "WhatsApp Group Invite: GroupName"   "WhatsApp Group: GroupName"
+  s = s.replace(/\s*[|\-·•:–—]\s*whatsapp(?:\s+group(?:\s+invite)?)?\s*$/i, "").trim();
+  s = s.replace(/^\s*whatsapp(?:\s+group)?(?:\s+invite)?\s*[:\-|·•–—]\s*/i, "").trim();
+  if (!s) return null;
+  if (GENERIC_TITLES.has(s.toLowerCase().trim())) return null;
+  // Reject if too short or just punctuation
+  if (s.replace(/[\W_]+/g, "").length < 2) return null;
+  return s;
+}
+
+// Try to find the group name in places other than og:title — used as a
+// fallback when WhatsApp serves a generic og:title for a valid group.
+function extractFallbackName(html: string, ogDescription: string | null): string | null {
+  // 1. <title> tag
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const fromTitle = cleanCandidateName(titleMatch?.[1]);
+  if (fromTitle) return fromTitle;
+
+  // 2. <h3> heading — WhatsApp's invite page typically renders the group name in an h3.
+  const h3Match = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+  if (h3Match) {
+    const stripped = h3Match[1].replace(/<[^>]+>/g, " ").trim();
+    const fromH3 = cleanCandidateName(stripped);
+    if (fromH3) return fromH3;
+  }
+
+  // 3. og:description sometimes leads with the group name, e.g.
+  //    "Join the group 'GroupName' via this invite link" or
+  //    "GroupName · 123 members"
+  if (ogDescription) {
+    const desc = ogDescription.trim();
+    // "GroupName · 123 members" or "GroupName • 123 members"
+    const sepMatch = desc.match(/^(.+?)\s*[·•|]\s*\d/);
+    const fromSep = cleanCandidateName(sepMatch?.[1]);
+    if (fromSep) return fromSep;
+    // "Join the 'GroupName' group" / 'group "GroupName"'
+    const quoted = desc.match(/['"\u201C\u2018]([^'"\u201D\u2019]{2,80})['"\u201D\u2019]/);
+    const fromQuoted = cleanCandidateName(quoted?.[1]);
+    if (fromQuoted) return fromQuoted;
+  }
+
+  return null;
+}
+
 function metaContent(html: string, prop: string): string | null {
   const re = new RegExp(
     `<meta[^>]+(?:property|name)=["']${prop}["'][^>]*content=["']([^"']*)["']`,
@@ -257,9 +310,15 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
       const titleIsGeneric =
         !ogTitle || GENERIC_TITLES.has(ogTitle.toLowerCase().trim());
 
-      // Generic title with NO member count → soft broken (let cron grace it).
-      // Generic title WITH member count → still alive, just weird preview.
-      if (titleIsGeneric && !hasMembers) {
+      // If og:title is generic, try harder to find the real name from the
+      // page <title>, an <h3>, or og:description before giving up.
+      const fallbackName = titleIsGeneric
+        ? extractFallbackName(html, ogDescription)
+        : null;
+
+      // Generic title, no fallback name, AND no member count → soft broken.
+      // Otherwise the link is alive (even if name preview is weird).
+      if (titleIsGeneric && !fallbackName && !hasMembers) {
         return {
           ok: false,
           name: null,
@@ -270,11 +329,11 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
         };
       }
 
-      // Real specific name OR generic-but-has-members → consider it valid.
-      const name = titleIsGeneric ? null : ogTitle;
+      // Prefer specific og:title, then fallback name, else null.
+      const name = titleIsGeneric ? fallbackName : cleanCandidateName(ogTitle);
       return {
         ok: true,
-        name,
+        name: name ?? null,
         imageUrl: ogImage || null,
         hasMembers,
       };
