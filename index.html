@@ -341,7 +341,7 @@ async function loadGroups(page){
     groupsList.className = 'grid';
     groupsList.innerHTML = items.map(g => groupCardHTML(g)).join('');
     groupsList.querySelectorAll('[data-report]').forEach(btn => {
-      btn.addEventListener('click', () => openReport(btn.dataset.report, btn.dataset.name));
+      btn.addEventListener('click', () => handleNotWorking(btn));
     });
     groupsList.querySelectorAll('[data-join]').forEach(btn => {
       btn.addEventListener('click', () => handleJoin(btn));
@@ -383,7 +383,7 @@ function groupCardHTML(g){
       ${g.description ? `<p class="group-desc">${escapeHtml(g.description)}</p>` : '<div style="flex:1"></div>'}
       <div class="group-actions">
         <button class="btn btn-primary" data-join="${g.id}" data-link="${escapeHtml(g.link)}" type="button">Join group</button>
-        <button class="btn btn-danger" data-report="${g.id}" data-name="${escapeHtml(name)}" type="button">Report — Admin only / Issue</button>
+        <button class="btn btn-danger" data-report="${g.id}" data-name="${escapeHtml(name)}" type="button">Not Working</button>
       </div>
     </div>`;
 }
@@ -426,6 +426,35 @@ async function handleJoin(btn){
     btn.disabled = false;
     btn.textContent = original;
     alert((data && (data.reason || data.error)) || 'Could not verify the link, please try again.');
+  }catch(e){
+    btn.disabled = false;
+    btn.textContent = original;
+    alert('Network error: ' + e.message);
+  }
+}
+
+async function handleNotWorking(btn){
+  const id = btn.dataset.report;
+  const original = btn.textContent;
+  if(!confirm('Report this group as Not Working? Admin will review and remove it if confirmed.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Reporting…';
+  try{
+    const r = await fetch('/api/groups/report', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId: Number(id), reason: 'Not working', details: '' })
+    });
+    if(r.ok){
+      btn.textContent = 'Reported ✓';
+      btn.classList.remove('btn-danger');
+      setTimeout(() => { btn.disabled = false; btn.textContent = original; btn.classList.add('btn-danger'); }, 3000);
+    } else {
+      const data = await r.json().catch(()=>({}));
+      btn.disabled = false;
+      btn.textContent = original;
+      alert(data.error || 'Could not send report. Please try again.');
+    }
   }catch(e){
     btn.disabled = false;
     btn.textContent = original;
