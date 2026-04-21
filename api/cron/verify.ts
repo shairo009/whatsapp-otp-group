@@ -51,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await client.query(
       `SELECT id, link, name, broken_since FROM groups
        WHERE status IN ('approved','pending')
-       ORDER BY last_checked_at ASC NULLS FIRST, id ASC
+       ORDER BY (name IS NULL) DESC, last_checked_at ASC NULLS FIRST, id ASC
        LIMIT $1`,
       [limit]
     );
