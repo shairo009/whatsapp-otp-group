@@ -209,6 +209,14 @@ function escapeHtml(s){
   return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function decodeHtmlEntities(s){
+  if(!s) return '';
+  return String(s)
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_,h)=>{ try{return String.fromCodePoint(parseInt(h,16));}catch(e){return _;} })
+    .replace(/&#([0-9]+);/g,        (_,d)=>{ try{return String.fromCodePoint(parseInt(d,10)); }catch(e){return _;} })
+    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&nbsp;/g,' ');
+}
+
 function initials(name){
   if(!name) return 'G';
   const w = name.trim().split(/\s+/).slice(0,2);
@@ -359,7 +367,7 @@ nextBtn.addEventListener('click', () => {
 });
 
 function groupCardHTML(g){
-  const name = g.name || 'WhatsApp Group';
+  const name = decodeHtmlEntities(g.name) || 'WhatsApp Group';
   const dp = g.imageUrl
     ? `<div class="group-dp"><img src="${escapeHtml(g.imageUrl)}" alt="" onerror="this.outerHTML='${initials(name)}'"></div>`
     : `<div class="group-dp">${initials(name)}</div>`;
