@@ -4,6 +4,11 @@ export type GroupPreview = {
   imageUrl: string | null;
   reason?: string;
   rateLimited?: boolean;
+  // Soft-broken means we *suspect* the link is dead (generic title, missing
+  // name, no member count) but we're not 100% sure. The cron should grace
+  // these via `broken_since` rather than removing on the first hit.
+  softBroken?: boolean;
+  hasMembers?: boolean;
 };
 
 const INVALID_MARKERS = [
@@ -14,10 +19,15 @@ const INVALID_MARKERS = [
   "reset by an admin",
   "this link has been revoked",
   "no longer available",
+  "invite was reset",
+  "link has been reset",
+  "check with the group admin",
 ];
 
-// These og:titles mean the link is broken/reset — WhatsApp falls back to
-// its own brand name when a group no longer exists behind the URL.
+// These og:titles mean WhatsApp couldn't resolve the group (or is serving a
+// fallback). They're a STRONG hint the link is broken — but not proof, since
+// WhatsApp occasionally serves them for valid groups during transient issues.
+// Treat as "soft broken" and let the cron grace them via broken_since.
 const GENERIC_TITLES = new Set([
   "whatsapp",
   "whatsapp group invite",
@@ -55,40 +65,64 @@ function decodeHtml(s: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
-function normalizeFancy(s: string): string {
-  let out = "";
-  for (const ch of s) {
-    const cp = ch.codePointAt(0)!;
-    if (cp >= 0x1d400 && cp <= 0x1d7ff) {
-      const offsets: Array<[number, number, string]> = [
-        [0x1d400, 0x1d419, "A"], [0x1d41a, 0x1d433, "a"],
-        [0x1d434, 0x1d44d, "A"], [0x1d44e, 0x1d467, "a"],
-        [0x1d468, 0x1d481, "A"], [0x1d482, 0x1d49b, "a"],
-        [0x1d49c, 0x1d4b5, "A"], [0x1d4b6, 0x1d4cf, "a"],
-        [0x1d4d0, 0x1d4e9, "A"], [0x1d4ea, 0x1d503, "a"],
-        [0x1d504, 0x1d51d, "A"], [0x1d51e, 0x1d537, "a"],
-        [0x1d538, 0x1d551, "A"], [0x1d552, 0x1d56b, "a"],
-        [0x1d56c, 0x1d585, "A"], [0x1d586, 0x1d59f, "a"],
-        [0x1d5a0, 0x1d5b9, "A"], [0x1d5ba, 0x1d5d3, "a"],
-        [0x1d5d4, 0x1d5ed, "A"], [0x1d5ee, 0x1d607, "a"],
-        [0x1d608, 0x1d621, "A"], [0x1d622, 0x1d63b, "a"],
-        [0x1d63c, 0x1d655, "A"], [0x1d656, 0x1d66f, "a"],
-        [0x1d670, 0x1d689, "A"], [0x1d68a, 0x1d6a3, "a"],
-        [0x1d7ce, 0x1d7d7, "0"], [0x1d7d8, 0x1d7e1, "0"],
-        [0x1d7e2, 0x1d7eb, "0"], [0x1d7ec, 0x1d7f5, "0"],
-        [0x1d7f6, 0x1d7ff, "0"],
-      ];
-      let mapped = ch;
-      for (const [start, end, base] of offsets) {
-        if (cp >= start && cp <= end) {
-          mapped = String.fromCharCode(base.charCodeAt(0) + (cp - start));
-          break;
-        }
+// Map a single fancy/styled unicode character to its plain ASCII equivalent
+// when possible. Covers Mathematical Alphanumeric Symbols, Enclosed
+// Alphanumerics, Fullwidth Latin, and a few other ranges users love to use
+// for stylized group names like 𝐎𝐓𝐏 / Ⓞⓣⓟ / OTP.
+function mapFancyChar(cp: number): string | null {
+  // Mathematical Alphanumeric Symbols (U+1D400..U+1D7FF)
+  if (cp >= 0x1d400 && cp <= 0x1d7ff) {
+    const ranges: Array<[number, number, string]> = [
+      [0x1d400, 0x1d419, "A"], [0x1d41a, 0x1d433, "a"],
+      [0x1d434, 0x1d44d, "A"], [0x1d44e, 0x1d467, "a"],
+      [0x1d468, 0x1d481, "A"], [0x1d482, 0x1d49b, "a"],
+      [0x1d49c, 0x1d4b5, "A"], [0x1d4b6, 0x1d4cf, "a"],
+      [0x1d4d0, 0x1d4e9, "A"], [0x1d4ea, 0x1d503, "a"],
+      [0x1d504, 0x1d51d, "A"], [0x1d51e, 0x1d537, "a"],
+      [0x1d538, 0x1d551, "A"], [0x1d552, 0x1d56b, "a"],
+      [0x1d56c, 0x1d585, "A"], [0x1d586, 0x1d59f, "a"],
+      [0x1d5a0, 0x1d5b9, "A"], [0x1d5ba, 0x1d5d3, "a"],
+      [0x1d5d4, 0x1d5ed, "A"], [0x1d5ee, 0x1d607, "a"],
+      [0x1d608, 0x1d621, "A"], [0x1d622, 0x1d63b, "a"],
+      [0x1d63c, 0x1d655, "A"], [0x1d656, 0x1d66f, "a"],
+      [0x1d670, 0x1d689, "A"], [0x1d68a, 0x1d6a3, "a"],
+      [0x1d7ce, 0x1d7d7, "0"], [0x1d7d8, 0x1d7e1, "0"],
+      [0x1d7e2, 0x1d7eb, "0"], [0x1d7ec, 0x1d7f5, "0"],
+      [0x1d7f6, 0x1d7ff, "0"],
+    ];
+    for (const [start, end, base] of ranges) {
+      if (cp >= start && cp <= end) {
+        return String.fromCharCode(base.charCodeAt(0) + (cp - start));
       }
-      out += mapped;
-    } else {
-      out += ch;
     }
+  }
+  // Enclosed Alphanumerics: Ⓐ..Ⓩ (U+24B6..U+24CF), ⓐ..ⓩ (U+24D0..U+24E9)
+  if (cp >= 0x24b6 && cp <= 0x24cf) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x24b6));
+  if (cp >= 0x24d0 && cp <= 0x24e9) return String.fromCharCode("a".charCodeAt(0) + (cp - 0x24d0));
+  // Fullwidth Latin: A..Z (U+FF21..U+FF3A), a..z (U+FF41..U+FF5A), 0..9 (U+FF10..U+FF19)
+  if (cp >= 0xff21 && cp <= 0xff3a) return String.fromCharCode("A".charCodeAt(0) + (cp - 0xff21));
+  if (cp >= 0xff41 && cp <= 0xff5a) return String.fromCharCode("a".charCodeAt(0) + (cp - 0xff41));
+  if (cp >= 0xff10 && cp <= 0xff19) return String.fromCharCode("0".charCodeAt(0) + (cp - 0xff10));
+  // Parenthesized Latin small: ⒜..⒵ (U+249C..U+24B5)
+  if (cp >= 0x249c && cp <= 0x24b5) return String.fromCharCode("a".charCodeAt(0) + (cp - 0x249c));
+  // Regional indicators: 🇦..🇿 (U+1F1E6..U+1F1FF) → A..Z
+  if (cp >= 0x1f1e6 && cp <= 0x1f1ff) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f1e6));
+  return null;
+}
+
+function normalizeFancy(s: string): string {
+  // First pass: try Unicode NFKD (handles many compatibility forms cheaply).
+  let pre: string;
+  try {
+    pre = s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  } catch {
+    pre = s;
+  }
+  let out = "";
+  for (const ch of pre) {
+    const cp = ch.codePointAt(0)!;
+    const mapped = mapFancyChar(cp);
+    out += mapped ?? ch;
   }
   return out;
 }
@@ -96,7 +130,10 @@ function normalizeFancy(s: string): string {
 export function nameContainsOTP(name: string | null | undefined): boolean {
   if (!name) return false;
   const normalized = normalizeFancy(name).toLowerCase();
-  return /\botp\b/.test(normalized) || /otp/.test(normalized);
+  // Match "otp" anywhere, with or without separators (otp, o.t.p, o-t-p, o t p)
+  if (/otp/.test(normalized)) return true;
+  if (/o[\s._\-*]?t[\s._\-*]?p/.test(normalized)) return true;
+  return false;
 }
 
 function metaContent(html: string, prop: string): string | null {
@@ -112,6 +149,22 @@ function metaContent(html: string, prop: string): string | null {
   );
   const m2 = html.match(re2);
   return m2 ? decodeHtml(m2[1]) : null;
+}
+
+// Look for "X members" / "X participants" in the page body OR description.
+// Valid invite links advertise a member count; revoked/reset links don't.
+function detectHasMembers(html: string, ogDescription: string | null): boolean {
+  const haystacks = [ogDescription || "", html];
+  const patterns = [
+    /\b\d{1,3}(?:[,.]\d{3})*\s*(?:members?|participants?)\b/i,
+    /\b(?:members?|participants?)\s*[:\-]?\s*\d{1,3}(?:[,.]\d{3})*/i,
+  ];
+  for (const h of haystacks) {
+    for (const re of patterns) {
+      if (re.test(h)) return true;
+    }
+  }
+  return false;
 }
 
 export function isValidWhatsAppLink(link: string): boolean {
@@ -184,7 +237,7 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
       const html = r.html;
       const lower = html.toLowerCase();
 
-      // Check for explicit invalid/revoked markers in page body
+      // HARD evidence the link is broken — explicit revoked/invalid text.
       for (const marker of INVALID_MARKERS) {
         if (lower.includes(marker)) {
           return { ok: false, name: null, imageUrl: null, reason: "Link reset or revoked" };
@@ -193,27 +246,38 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
 
       const ogTitle = metaContent(html, "og:title");
       const ogImage = metaContent(html, "og:image");
+      const ogDescription = metaContent(html, "og:description");
+      const hasMembers = detectHasMembers(html, ogDescription);
 
-      // No metadata at all → broken link
+      // No metadata at all → broken link (hard).
       if (!ogTitle && !ogImage) {
         return { ok: false, name: null, imageUrl: null, reason: "No group preview available" };
       }
 
-      // --- KEY FIX ---
-      // If og:title is a generic WhatsApp brand title (not a real group name),
-      // the invite link is broken/reset. WhatsApp always sets a specific group
-      // name as og:title for valid links. A generic title = dead link.
-      if (!ogTitle || GENERIC_TITLES.has(ogTitle.toLowerCase().trim())) {
+      const titleIsGeneric =
+        !ogTitle || GENERIC_TITLES.has(ogTitle.toLowerCase().trim());
+
+      // Generic title with NO member count → soft broken (let cron grace it).
+      // Generic title WITH member count → still alive, just weird preview.
+      if (titleIsGeneric && !hasMembers) {
         return {
           ok: false,
           name: null,
-          imageUrl: null,
-          reason: "Link reset or revoked (no group name in preview)",
+          imageUrl: ogImage || null,
+          reason: "Generic preview, no member count (likely reset)",
+          softBroken: true,
+          hasMembers: false,
         };
       }
 
-      // We have a real, specific group name → valid link
-      return { ok: true, name: ogTitle, imageUrl: ogImage || null };
+      // Real specific name OR generic-but-has-members → consider it valid.
+      const name = titleIsGeneric ? null : ogTitle;
+      return {
+        ok: true,
+        name,
+        imageUrl: ogImage || null,
+        hasMembers,
+      };
     }
 
     if (!transient) {
