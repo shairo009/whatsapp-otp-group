@@ -8,7 +8,8 @@ import {
   normalizeName,
 } from "../_lib/whatsapp";
 
-const MAX_LINKS = 40;
+const MAX_LINKS = 500;
+const MAX_ADDS = 40;
 const CONCURRENCY = 2;
 
 type ResultItem = {
@@ -23,7 +24,8 @@ type ResultItem = {
 
 async function processOne(
   link: string,
-  description: string | null
+  description: string | null,
+  counter: { added: number }
 ): Promise<ResultItem> {
   if (!isValidWhatsAppLink(link)) {
     return { link, status: "failed", reason: "Invalid link format" };
@@ -96,12 +98,21 @@ async function processOne(
       }
     }
 
+    if (counter.added >= MAX_ADDS) {
+      return {
+        link,
+        status: "failed",
+        reason: `Add limit reached — only ${MAX_ADDS} groups can be added per submit. This link is valid but was not added.`,
+      };
+    }
+
     const result = await client.query(
       `INSERT INTO groups (link, description, name, image_url, status, last_checked_at)
        VALUES ($1, $2, $3, $4, 'pending', NOW())
        RETURNING id, name, image_url`,
       [link, description, preview.name, preview.imageUrl]
     );
+    counter.added++;
     const r = result.rows[0];
     return {
       link,
@@ -125,12 +136,13 @@ async function processBatch(
   description: string | null
 ): Promise<ResultItem[]> {
   const out: ResultItem[] = new Array(links.length);
+  const counter = { added: 0 };
   let i = 0;
   async function worker() {
     while (true) {
       const idx = i++;
       if (idx >= links.length) return;
-      out[idx] = await processOne(links[idx], description);
+      out[idx] = await processOne(links[idx], description, counter);
     }
   }
   const workers = Array.from(
@@ -199,6 +211,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     failed: results.filter((r) => r.status === "failed").length,
     truncated,
     maxPerSubmit: MAX_LINKS,
+    maxAdds: MAX_ADDS,
   };
 
   return res.status(toProcess.length === 1 && results[0].status === "failed" ? 400 : 200).json({
