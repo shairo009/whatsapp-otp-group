@@ -5,17 +5,15 @@ import { fetchGroupPreview, nameContainsOTP } from "../_lib/whatsapp";
 /**
  * Real-time link check fired when a user taps "Join group" on the site.
  *
- * - HARD broken (explicit revoke text, no metadata)  -> remove + block.
- * - SOFT broken (generic preview, no member count)   -> mark broken_since
- *                                                       but still let user
- *                                                       try the link. The
- *                                                       cron will remove it
- *                                                       only if it stays
- *                                                       soft-broken past the
- *                                                       grace window.
- * - Rate-limited / 5xx                               -> let user try.
- * - OK + not OTP (when name is known)                -> remove + block.
- * - OK                                               -> open link.
+ * Policy: a real, working link must NEVER be killed by a join-click.
+ * Only the hourly cron is allowed to mark links as broken (broken_since /
+ * removed). The join handler only blocks on signals that are virtually
+ * impossible to come from a healthy link:
+ *   - Explicit "invite revoked / reset" text in WhatsApp's own page body
+ *   - Page that returned no metadata at all
+ *   - Group already marked removed/rejected in our DB
+ * Anything ambiguous (generic preview, rate-limit, 5xx) -> just open the
+ * link and let WhatsApp itself decide.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -54,7 +52,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const preview = await fetchGroupPreview(row.link);
 
-    // HARD broken: explicit invalid markers / no metadata at all. Remove.
+    // HARD broken: explicit "invite revoked" text from WhatsApp itself, or
+    // a page with no metadata at all. A real link CANNOT produce these
+    // signals — they only appear on actually dead links. Safe to remove.
     const isHardBroken =
       !preview.ok && !preview.softBroken && !preview.rateLimited;
     if (isHardBroken) {
@@ -73,19 +73,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // SOFT broken: generic preview with no member count. WhatsApp does this
-    // for some valid links during transient issues, so DON'T remove on the
-    // first hit — just mark broken_since (cron will grace + remove later).
-    // Still let the user try opening the link; if it really is dead, WhatsApp
-    // will tell them. If it's alive, they join successfully.
-    if (!preview.ok && preview.softBroken) {
-      await client.query(
-        `UPDATE groups
-           SET broken_since = COALESCE(broken_since, NOW()),
-               last_checked_at = NOW()
-         WHERE id = $1`,
-        [row.id]
-      );
+    // SOFT broken / rate-limited / 5xx — DO NOT touch the row at all.
+    // Just open the link. If it's real, the user joins. If it's dead, the
+    // hourly cron will catch it across multiple checks and remove it then.
+    if (!preview.ok) {
       return res.json({
         ok: true,
         link: row.link,
@@ -93,20 +84,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Transient (rate-limited / 5xx). Let the user try.
-    if (!preview.ok && preview.rateLimited) {
-      return res.json({
-        ok: true,
-        link: row.link,
-        warning: preview.reason || "Could not verify right now",
-      });
-    }
-
-    // Successful preview. Enforce OTP-only policy in real time as well.
-    const effectiveName = preview.name ?? row.name;
-    const knowName = !!effectiveName;
-    const isOtp = nameContainsOTP(effectiveName);
-    if (knowName && !isOtp) {
+    // Successful preview. Enforce OTP-only policy in real time as well —
+    // but ONLY when we have a real, specific group name to check against.
+    // Never remove on "unknown name".
+    const previewName = preview.name;
+    if (previewName && !nameContainsOTP(previewName)) {
       await client.query(
         `UPDATE groups
            SET status = 'removed',
@@ -134,6 +116,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.json({ ok: true, link: row.link });
   } catch (err: any) {
+    // Network/DB errors must never kill the link. Return the link if we
+    // already loaded it; otherwise surface a soft error.
     return res.status(500).json({
       ok: false,
       removed: false,
