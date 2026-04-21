@@ -1,0 +1,70 @@
+name: Hourly group verify
+
+# Hits /api/cron/verify every hour to check WhatsApp group links and remove
+# any that have been reset / revoked. Free GitHub Actions cron — independent
+# of Vercel's Hobby plan once-per-day cron limit.
+#
+# Setup (one-time):
+#   GitHub repo -> Settings -> Secrets and variables -> Actions
+#     SITE_URL    = https://whatsapp-otp-group.vercel.app   (no trailing slash)
+#     ADMIN_KEY   = <same value as the ADMIN_KEY env var on Vercel>
+#
+# Throttling:
+#   BATCH_LIMIT  - how many groups to verify per request (default 8).
+#   BATCH_DELAY  - ms to wait between WhatsApp fetches (default 500).
+#   BATCHES      - how many sequential batches to run per hour (default 4).
+#   PAUSE        - seconds to wait between batches (default 90).
+# With defaults: 4 batches x 8 groups = up to 32 groups checked per hour,
+# spread over ~6 minutes. Plenty slow to avoid WhatsApp blocking us.
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: hourly-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SITE_URL: ${{ secrets.SITE_URL }}
+      ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+      BATCH_LIMIT: "8"
+      BATCH_DELAY: "500"
+      BATCHES: "4"
+      PAUSE: "90"
+    steps:
+      - name: Sanity check secrets
+        run: |
+          if [ -z "$SITE_URL" ]; then
+            echo "::error::SITE_URL secret is not set"
+            exit 1
+          fi
+          if [ -z "$ADMIN_KEY" ]; then
+            echo "::error::ADMIN_KEY secret is not set"
+            exit 1
+          fi
+
+      - name: Run verify in throttled batches
+        run: |
+          set -u
+          for i in $(seq 1 "$BATCHES"); do
+            echo "::group::Batch $i / $BATCHES"
+            URL="${SITE_URL%/}/api/cron/verify?limit=${BATCH_LIMIT}&delay=${BATCH_DELAY}"
+            HTTP_CODE=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+              -H "x-admin-key: $ADMIN_KEY" \
+              --max-time 60 \
+              "$URL" || echo "000")
+            echo "HTTP $HTTP_CODE"
+            head -c 2000 /tmp/resp.json || true
+            echo ""
+            echo "::endgroup::"
+            if [ "$i" -lt "$BATCHES" ]; then
+              echo "Sleeping ${PAUSE}s before next batch..."
+              sleep "$PAUSE"
+            fi
+          done
