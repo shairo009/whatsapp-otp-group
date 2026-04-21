@@ -170,25 +170,33 @@ function mapFancyChar(cp: number): string | null {
   if (cp === 0x2070) return "0"; if (cp === 0x00B9) return "1";
   if (cp === 0x00B2) return "2"; if (cp === 0x00B3) return "3";
   if (cp >= 0x2074 && cp <= 0x2079) return String.fromCharCode("4".charCodeAt(0) + (cp - 0x2074));
-  // Latin Letter Small Capitals (U+1D00..U+1D25) — IPA / phonetic chars that
-  // look like ALL-CAPS letters but are lowercase codepoints. Irregular table.
+  // === Latin Letter Small Capitals (full A..Z) ===
+  // IPA / phonetic chars that LOOK like ALL-CAPS letters but are lowercase
+  // codepoints. Irregular: scattered across IPA Extensions, Phonetic Ext.,
+  // and Latin Extended-D blocks. Complete A..Z below.
   const SMALL_CAPS: Record<number, string> = {
-    0x1D00:"A", 0x1D03:"B", 0x1D04:"C", 0x1D05:"D", 0x1D07:"E",
-    0x1D0A:"J", 0x1D0B:"K", 0x1D0C:"L", 0x1D0D:"M", 0x1D0E:"N",
-    0x1D0F:"O", 0x1D18:"P", 0x1D1B:"T", 0x1D1C:"U", 0x1D20:"V",
-    0x1D21:"W", 0x1D22:"Z",
-    0xA730:"F", 0xA7AE:"I", 0xA7AF:"Q", 0xA7B2:"J",
+    0x1D00:"A", 0x0299:"B", 0x1D04:"C", 0x1D05:"D", 0x1D07:"E",
+    0xA730:"F", 0x0262:"G", 0x029C:"H", 0x026A:"I", 0x1D0A:"J",
+    0x1D0B:"K", 0x029F:"L", 0x1D0D:"M", 0x0274:"N", 0x1D0F:"O",
+    0x1D18:"P", 0xA7AF:"Q", 0x0280:"R", 0xA731:"S", 0x1D1B:"T",
+    0x1D1C:"U", 0x1D20:"V", 0x1D21:"W", /* X — no standard small-cap */
+    0x028F:"Y", 0x1D22:"Z",
+    // alt small-cap forms
+    0xA7AE:"I", 0xA7B2:"J",
   };
   if (SMALL_CAPS[cp]) return SMALL_CAPS[cp];
-  // Modifier Letter Capital / Superscript Latin caps (U+1D2C..U+1D42)
+  // === Modifier Letter / Superscript Latin Capitals (full where exists) ===
+  // U+1D2C..U+1D42 + scattered. Some letters (C, F, Q, S, X, Y, Z) have no
+  // official superscript-capital codepoint and are simply not mappable here.
   const MOD_CAPS: Record<number, string> = {
     0x1D2C:"A", 0x1D2E:"B", 0x1D30:"D", 0x1D31:"E", 0x1D33:"G",
     0x1D34:"H", 0x1D35:"I", 0x1D36:"J", 0x1D37:"K", 0x1D38:"L",
     0x1D39:"M", 0x1D3A:"N", 0x1D3C:"O", 0x1D3E:"P", 0x1D3F:"R",
-    0x1D40:"T", 0x1D41:"U", 0x1D42:"W",
+    0x1D40:"T", 0x1D41:"U", 0x2C7D:"V", 0x1D42:"W",
   };
   if (MOD_CAPS[cp]) return MOD_CAPS[cp];
-  // Modifier Letter Small (superscript lowercase) — U+1D43..U+1D61, irregular
+  // === Modifier Letter / Superscript Latin Small (full a..z where exists) ===
+  // 'q' has no standard superscript codepoint.
   const MOD_SMALL: Record<number, string> = {
     0x1D43:"a", 0x1D47:"b", 0x1D9C:"c", 0x1D48:"d", 0x1D49:"e",
     0x1DA0:"f", 0x1D4D:"g", 0x02B0:"h", 0x2071:"i", 0x02B2:"j",
@@ -197,6 +205,15 @@ function mapFancyChar(cp: number): string | null {
     0x1D5B:"v", 0x02B7:"w", 0x02E3:"x", 0x02B8:"y", 0x1DBB:"z",
   };
   if (MOD_SMALL[cp]) return MOD_SMALL[cp];
+  // === Dingbat / circled digit alternates (1..10 → '1'..'0') ===
+  // ①..⑨ U+2460..U+2468  ➀..➈ U+2780..U+2788  ➊..➒ U+278A..U+2792
+  // ❶..❾ U+2776..U+277E  most NFKD-decompose to ASCII, but include for safety.
+  if (cp >= 0x2460 && cp <= 0x2468) return String.fromCharCode("1".charCodeAt(0) + (cp - 0x2460));
+  if (cp >= 0x2776 && cp <= 0x277E) return String.fromCharCode("1".charCodeAt(0) + (cp - 0x2776));
+  if (cp >= 0x2780 && cp <= 0x2788) return String.fromCharCode("1".charCodeAt(0) + (cp - 0x2780));
+  if (cp >= 0x278A && cp <= 0x2792) return String.fromCharCode("1".charCodeAt(0) + (cp - 0x278A));
+  if (cp === 0x24EA || cp === 0x24FF || cp === 0x2789 || cp === 0x2793 || cp === 0x277F) return "0";
+  // === Double-struck digits 𝟘..𝟡 are inside the 1D7xx block above. ===
   // Cyrillic / Greek homoglyphs
   const ch = String.fromCodePoint(cp);
   if (HOMOGLYPHS[ch]) return HOMOGLYPHS[ch];
