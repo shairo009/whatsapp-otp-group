@@ -367,7 +367,7 @@ nextBtn.addEventListener('click', () => {
 });
 
 function groupCardHTML(g){
-  const name = decodeHtmlEntities(g.name) || 'WhatsApp Group';
+  const name = decodeHtmlEntities(g.name) || 'Whatsapp Otp Group';
   const dp = g.imageUrl
     ? `<div class="group-dp"><img src="${escapeHtml(g.imageUrl)}" alt="" onerror="this.outerHTML='${initials(name)}'"></div>`
     : `<div class="group-dp">${initials(name)}</div>`;
