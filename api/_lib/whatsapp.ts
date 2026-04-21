@@ -76,12 +76,20 @@ const HOMOGLYPHS: Record<string, string> = {
   "\u0425":"X","\u0406":"I","\u0408":"J","\u0405":"S","\u04AE":"Y",
   "\u0470":"P","\u0474":"V","\u051A":"Q","\u051C":"W","\u050C":"G",
   "\u04C0":"I","\u04CF":"i","\u048A":"I","\u04AC":"T","\u04A0":"K",
+  "\u0400":"E","\u0401":"E","\u0403":"F","\u0404":"E","\u0407":"I",
+  "\u040C":"K","\u040D":"I","\u040E":"Y","\u0496":"X","\u04B2":"X",
+  "\u04C1":"X","\u04C3":"K","\u04C5":"L","\u04C7":"H","\u04C9":"N",
+  "\u04CB":"Y","\u04CD":"M","\u04E2":"N","\u04EE":"Y","\u04F0":"Y",
+  "\u04F2":"Y","\u04F4":"Y","\u04F8":"H","\u04FA":"G",
   // === Cyrillic lowercase ===
   "\u0430":"a","\u0435":"e","\u043A":"k","\u043E":"o","\u0440":"p",
   "\u0441":"c","\u0445":"x","\u0443":"y","\u0456":"i","\u0458":"j",
   "\u0455":"s","\u04CE":"m","\u04BB":"h","\u04AF":"y","\u051B":"q",
-  "\u051D":"w","\u050D":"g","\u04BD":"h","\u0501":"d","\u057C":"n",
+  "\u051D":"w","\u050D":"g","\u04BD":"h","\u0501":"d",
   "\u0461":"w","\u0463":"b","\u0475":"v","\u04A3":"n",
+  "\u0450":"e","\u0451":"e","\u0454":"e","\u0457":"i","\u045C":"k",
+  "\u045D":"i","\u045E":"y","\u04BC":"h","\u04CA":"y","\u04CC":"m",
+  "\u04BF":"h","\u0499":"3","\u0433":"r","\u0442":"m","\u04D9":"a",
   // === Greek uppercase ===
   "\u0391":"A","\u0392":"B","\u0395":"E","\u0396":"Z","\u0397":"H",
   "\u0399":"I","\u039A":"K","\u039C":"M","\u039D":"N","\u039F":"O",
@@ -89,22 +97,69 @@ const HOMOGLYPHS: Record<string, string> = {
   "\u03BF":"o","\u03C1":"p","\u03C4":"t","\u03B9":"i","\u03BD":"v",
   "\u03BA":"k","\u03B1":"a","\u03B5":"e","\u03BC":"u","\u03C7":"x",
   "\u03C5":"u","\u03C9":"w","\u03B7":"n","\u03B2":"B","\u03B6":"z",
-  // === Armenian look-alikes ===
-  "\u0548":"O","\u054C":"P","\u054F":"S","\u0555":"O","\u0540":"H",
-  "\u0533":"S","\u0541":"Q","\u057D":"u","\u0578":"n","\u056C":"l",
-  // === Coptic (uppercase) — many duplicate Greek but distinct codepoints ===
-  "\u2C95":"O","\u2C9F":"P","\u2CA3":"T","\u2C8E":"H","\u2C82":"B",
-  // === Cherokee letters that mimic Latin ===
-  "\u13AA":"L","\u13A0":"D","\u13A1":"R","\u13A6":"W","\u13A9":"Z",
-  "\u13AB":"C","\u13B3":"S","\u13C0":"G","\u13C2":"M","\u13C3":"H",
-  "\u13DE":"L","\u13F4":"B","\u13EF":"P","\u13E2":"T",
-  // === Letter-like math operators ===
+  "\u0398":"O","\u039B":"A","\u039E":"E","\u03A0":"H",
+  "\u03A3":"E","\u03D1":"t","\u03D2":"Y","\u03D5":"o","\u03DD":"F",
+  "\u03DE":"Q","\u03E2":"W","\u03E4":"O","\u03F3":"j","\u03F4":"O",
+  // === Armenian look-alikes (FULL SET) ===
+  "\u0531":"U","\u0532":"F","\u0533":"Q","\u0534":"T","\u0535":"E",
+  "\u0536":"Q","\u0537":"E","\u0538":"C","\u053A":"J","\u053F":"Y",
+  "\u0540":"H","\u0541":"Q","\u0548":"O","\u054B":"Q","\u054C":"P",
+  "\u054D":"U","\u054F":"S","\u0552":"L","\u0553":"O","\u0555":"O",
+  "\u0556":"D","\u0562":"p","\u0563":"q","\u0564":"r","\u0566":"q",
+  "\u0567":"t","\u056A":"d","\u056F":"l","\u0570":"h","\u0571":"q",
+  "\u0573":"6","\u0574":"u","\u0575":"j","\u0576":"u","\u0578":"n",
+  "\u057A":"w","\u057B":"q","\u057C":"n","\u057D":"u","\u057F":"in",
+  "\u0581":"g","\u0582":"L","\u0584":"p","\u0585":"o","\u0586":"d",
+  // === Coptic (UPPER+LOWER) — many duplicate Greek but distinct codepoints ===
+  "\u2C80":"A","\u2C82":"B","\u2C84":"G","\u2C86":"D","\u2C88":"E",
+  "\u2C8A":"S","\u2C8C":"Z","\u2C8E":"H","\u2C90":"T","\u2C92":"I",
+  "\u2C94":"K","\u2C96":"L","\u2C98":"M","\u2C9A":"N",
+  "\u2C9C":"E","\u2C9E":"O","\u2CA0":"R","\u2CA2":"S",
+  "\u2CA4":"U","\u2CA6":"F","\u2CA8":"K","\u2CAA":"P",
+  "\u2CAC":"O","\u2CAE":"C","\u2CB0":"T",
+  "\u2C81":"a","\u2C83":"b","\u2C89":"e","\u2C8F":"h","\u2C93":"i",
+  "\u2C95":"k","\u2C97":"l","\u2C99":"m","\u2C9B":"n","\u2C9D":"e",
+  "\u2C9F":"o","\u2CA1":"p","\u2CA3":"t","\u2CA5":"u","\u2CA7":"f",
+  "\u2CA9":"k","\u2CAB":"h","\u2CAD":"c","\u2CAF":"c","\u2CB1":"t",
+  "\u2CB3":"a",
+  // === Cherokee letters that mimic Latin (FULL practical set) ===
+  "\u13A0":"D","\u13A1":"R","\u13A2":"T","\u13A3":"i","\u13A6":"W",
+  "\u13A9":"Z","\u13AA":"L","\u13AB":"C","\u13AC":"C","\u13B1":"E",
+  "\u13B3":"S","\u13B7":"J","\u13BB":"H","\u13BD":"Y","\u13BE":"G",
+  "\u13C0":"G","\u13C1":"h","\u13C2":"M","\u13C3":"H","\u13CF":"P",
+  "\u13D5":"K","\u13D9":"V","\u13DA":"S","\u13DD":"C","\u13DE":"L",
+  "\u13DF":"C","\u13E2":"T","\u13E6":"B","\u13E7":"F","\u13EB":"V",
+  "\u13EF":"P","\u13F4":"B","\u13F5":"G",
+  // === Georgian-like / Glagolitic rarities (skip, rarely abused) ===
+  // === Letter-like math / symbol operators ===
   "\u2126":"O", // ohm (Ω)
+  "\u212A":"K", // Kelvin sign
+  "\u212B":"A", // Angstrom sign
   "\u00B5":"u", // micro sign
+  "\u0299":"B", "\u00DF":"B", "\u00D8":"O", "\u00F8":"o", "\u00DE":"P",
+  "\u00FE":"p", "\u00D0":"D", "\u00F0":"o",
   // === Digit homoglyphs ===
   "\u04E0":"3","\u0417":"3","\u0437":"3", // Cyrillic 3-lookalikes
   "\u0431":"6", // Cyrillic б often used as 6
-  "\u0421\u041E":"CO", // (kept for clarity; pair handled by single-char loop too)
+  "\u07C0":"0","\u0BE6":"0","\u0ED0":"0", // other-script zero-lookalikes
+  "\u06F0":"0","\u0660":"0", // arabic-indic 0
+  "\u0661":"1","\u06F1":"1",
+  "\u0662":"2","\u06F2":"2",
+  "\u0663":"3","\u06F3":"3",
+  "\u0664":"4","\u06F4":"4",
+  "\u0665":"5","\u06F5":"5",
+  "\u0666":"6","\u06F6":"6",
+  "\u0667":"7","\u06F7":"7",
+  "\u0668":"8","\u06F8":"8",
+  "\u0669":"9","\u06F9":"9",
+  // Devanagari digits (Hindi)
+  "\u0966":"0","\u0967":"1","\u0968":"2","\u0969":"3","\u096A":"4",
+  "\u096B":"5","\u096C":"6","\u096D":"7","\u096E":"8","\u096F":"9",
+  // Bengali digits
+  "\u09E6":"0","\u09E7":"1","\u09E8":"2","\u09E9":"3","\u09EA":"4",
+  "\u09EB":"5","\u09EC":"6","\u09ED":"7","\u09EE":"8","\u09EF":"9",
+  // === Latin ligatures / misc tokens ===
+  "\u0153":"oe", "\u0152":"OE", "\u00E6":"ae", "\u00C6":"AE",
 };
 
 // Map a single fancy/styled unicode character to its plain ASCII equivalent
@@ -214,7 +269,82 @@ function mapFancyChar(cp: number): string | null {
   if (cp >= 0x278A && cp <= 0x2792) return String.fromCharCode("1".charCodeAt(0) + (cp - 0x278A));
   if (cp === 0x24EA || cp === 0x24FF || cp === 0x2789 || cp === 0x2793 || cp === 0x277F) return "0";
   // === Double-struck digits 𝟘..𝟡 are inside the 1D7xx block above. ===
-  // Cyrillic / Greek homoglyphs
+  // === IPA Extensions (U+0250..U+02AF) — many are Latin-lookalikes ===
+  const IPA: Record<number, string> = {
+    0x0250:"a", 0x0251:"a", 0x0252:"a", 0x0253:"b", 0x0254:"o",
+    0x0255:"c", 0x0256:"d", 0x0257:"d", 0x0258:"e", 0x0259:"e",
+    0x025A:"e", 0x025B:"e", 0x025C:"e", 0x025D:"e", 0x025E:"e",
+    0x025F:"j", 0x0260:"g", 0x0261:"g", 0x0263:"y", 0x0264:"y",
+    0x0265:"h", 0x0266:"h", 0x0267:"h", 0x0268:"i", 0x0269:"i",
+    0x026B:"l", 0x026C:"l", 0x026D:"l", 0x026E:"l", 0x026F:"m",
+    0x0270:"m", 0x0271:"m", 0x0272:"n", 0x0273:"n", 0x0275:"o",
+    0x0276:"o", 0x0277:"o", 0x0278:"f", 0x0279:"r", 0x027A:"r",
+    0x027B:"r", 0x027C:"r", 0x027D:"r", 0x027E:"r", 0x027F:"r",
+    0x0281:"r", 0x0282:"s", 0x0283:"s", 0x0284:"j", 0x0285:"s",
+    0x0286:"s", 0x0287:"t", 0x0288:"t", 0x0289:"u", 0x028A:"u",
+    0x028B:"v", 0x028C:"v", 0x028D:"w", 0x028E:"y", 0x0290:"z",
+    0x0291:"z", 0x0292:"z", 0x0293:"z", 0x0294:"?", 0x0295:"?",
+    0x029A:"e", 0x029B:"G", 0x029D:"j", 0x029E:"k",
+    0x02A0:"q", 0x02A1:"?", 0x02A2:"?", 0x02A3:"dz", 0x02A4:"dz",
+    0x02A5:"dz", 0x02A6:"ts", 0x02A7:"ts", 0x02A8:"tc", 0x02A9:"fn",
+    0x02AA:"ls", 0x02AB:"lz", 0x02AC:"w", 0x02AD:"h", 0x02AE:"h",
+    0x02AF:"h",
+  };
+  if (IPA[cp]) return IPA[cp];
+  // === Latin Extended-C (U+2C60..U+2C7F) — barred/stroked/turned letters ===
+  const LATIN_EXT_C: Record<number, string> = {
+    0x2C60:"L", 0x2C61:"l", 0x2C62:"L", 0x2C63:"P", 0x2C64:"R",
+    0x2C65:"a", 0x2C66:"t", 0x2C67:"H", 0x2C68:"h", 0x2C69:"K",
+    0x2C6A:"k", 0x2C6B:"Z", 0x2C6C:"z", 0x2C6E:"M", 0x2C6F:"A",
+    0x2C70:"A", 0x2C71:"v", 0x2C72:"W", 0x2C73:"w", 0x2C74:"v",
+    0x2C75:"H", 0x2C76:"h", 0x2C78:"e", 0x2C79:"r", 0x2C7A:"o",
+    0x2C7B:"e", 0x2C7C:"j", 0x2C7E:"S", 0x2C7F:"Z",
+  };
+  if (LATIN_EXT_C[cp]) return LATIN_EXT_C[cp];
+  // === Latin Extended-D (U+A720..U+A7FF) selected Latin-lookalikes ===
+  // (Small-caps in this range are already handled above; add the rest.)
+  const LATIN_EXT_D: Record<number, string> = {
+    0x0180:"b", 0x0181:"B", 0x0182:"B", 0x0183:"b", 0x0184:"H",
+    0x0185:"h", 0x0187:"C", 0x0188:"c", 0x018A:"D", 0x018B:"D",
+    0x018C:"d", 0x0191:"F", 0x0192:"f", 0x0193:"G", 0x0195:"hv",
+    0x0197:"I", 0x0198:"K", 0x0199:"k", 0x019A:"l", 0x019D:"N",
+    0x019E:"n", 0x01A0:"O", 0x01A1:"o", 0x01A4:"P", 0x01A5:"p",
+    0x01AB:"t", 0x01AC:"T", 0x01AD:"t", 0x01AE:"T", 0x01AF:"U",
+    0x01B0:"u", 0x01B2:"V", 0x01B3:"Y", 0x01B4:"y", 0x01B5:"Z",
+    0x01B6:"z", 0x01BB:"2", 0x01C0:"|", 0x01C3:"!",
+    0x0220:"N", 0x0221:"d", 0x0224:"Z", 0x0225:"z", 0x0234:"l",
+    0x0235:"n", 0x0236:"t", 0x0237:"j",
+    0x023A:"A", 0x023B:"C", 0x023C:"c", 0x023D:"L", 0x023E:"T",
+    0x023F:"s", 0x0240:"z", 0x0243:"B", 0x0244:"U", 0x0246:"E",
+    0x0247:"e", 0x0248:"J", 0x0249:"j", 0x024A:"Q", 0x024B:"q",
+    0x024C:"R", 0x024D:"r", 0x024E:"Y", 0x024F:"y",
+    0xA7A0:"G", 0xA7A1:"g", 0xA7A2:"K", 0xA7A3:"k", 0xA7A4:"N",
+    0xA7A5:"n", 0xA7A6:"R", 0xA7A7:"r", 0xA7A8:"S", 0xA7A9:"s",
+    0xA7AA:"H", 0xA7AB:"E", 0xA7AC:"L", 0xA7AD:"L", 0xA7B0:"K",
+    0xA7B1:"T",
+  };
+  if (LATIN_EXT_D[cp]) return LATIN_EXT_D[cp];
+  // === Letterlike Symbols (U+2100..U+214F) — catch ones NFKD misses ===
+  const LETTERLIKE: Record<number, string> = {
+    0x2102:"C", 0x2105:"c", 0x2107:"E", 0x210A:"g", 0x210B:"H",
+    0x210C:"H", 0x210D:"H", 0x210E:"h", 0x210F:"h", 0x2110:"I",
+    0x2111:"I", 0x2112:"L", 0x2113:"l", 0x2115:"N", 0x2118:"P",
+    0x2119:"P", 0x211A:"Q", 0x211B:"R", 0x211C:"R", 0x211D:"R",
+    0x2124:"Z", 0x2128:"Z", 0x212C:"B", 0x212D:"C", 0x212F:"e",
+    0x2130:"E", 0x2131:"F", 0x2132:"F", 0x2133:"M", 0x2134:"o",
+    0x2135:"A", 0x2139:"i", 0x213C:"p", 0x213D:"y", 0x213E:"G",
+    0x213F:"P", 0x2145:"D", 0x2146:"d", 0x2147:"e", 0x2148:"i",
+    0x2149:"j",
+  };
+  if (LETTERLIKE[cp]) return LETTERLIKE[cp];
+  // === Ligatures (U+FB00..U+FB06) — NFKD usually handles these, but include ===
+  if (cp === 0xFB00) return "ff";
+  if (cp === 0xFB01) return "fi";
+  if (cp === 0xFB02) return "fl";
+  if (cp === 0xFB03) return "ffi";
+  if (cp === 0xFB04) return "ffl";
+  if (cp === 0xFB05 || cp === 0xFB06) return "st";
+  // === Cyrillic / Greek / Armenian / Coptic / Cherokee homoglyphs (table) ===
   const ch = String.fromCodePoint(cp);
   if (HOMOGLYPHS[ch]) return HOMOGLYPHS[ch];
   return null;
