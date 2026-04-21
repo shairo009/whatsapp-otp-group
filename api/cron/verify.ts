@@ -20,8 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const client = await getPool().connect();
   const checked: any[] = [];
   const removed: any[] = [];
-  const grace: any[] = [];
-  const BROKEN_GRACE_DAYS = 5;
+  const skipped: any[] = [];
   try {
     // Ensure broken_since column exists (idempotent migration)
     await client.query(
@@ -37,42 +36,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     for (const row of result.rows) {
       const preview = await fetchGroupPreview(row.link);
 
-      // Hard-broken (link reset/revoked/invalid). Apply 5-day grace period:
-      // mark broken_since on first detection; only remove after 5 days of
-      // continuous failure.
-      if (!preview.ok && !preview.rateLimited) {
-        if (!row.broken_since) {
-          await client.query(
-            "UPDATE groups SET broken_since = NOW(), last_checked_at = NOW() WHERE id = $1",
-            [row.id]
-          );
-          grace.push({ id: row.id, link: row.link, reason: preview.reason, day: 1 });
-        } else {
-          const ageMs = Date.now() - new Date(row.broken_since).getTime();
-          const ageDays = ageMs / (1000 * 60 * 60 * 24);
-          if (ageDays >= BROKEN_GRACE_DAYS) {
-            await client.query(
-              "UPDATE groups SET status = 'removed', last_checked_at = NOW() WHERE id = $1",
-              [row.id]
-            );
-            removed.push({
-              id: row.id,
-              link: row.link,
-              reason: `${preview.reason} (broken > ${BROKEN_GRACE_DAYS} days)`,
-            });
-          } else {
-            await client.query(
-              "UPDATE groups SET last_checked_at = NOW() WHERE id = $1",
-              [row.id]
-            );
-            grace.push({
-              id: row.id,
-              link: row.link,
-              reason: preview.reason,
-              day: Math.ceil(ageDays),
-            });
-          }
-        }
+      // Transient failure (rate-limit / 5xx). Don't punish the group; try
+      // again on the next hourly run.
+      if (!preview.ok && preview.rateLimited) {
+        await client.query(
+          "UPDATE groups SET last_checked_at = NOW() WHERE id = $1",
+          [row.id]
+        );
+        skipped.push({ id: row.id, link: row.link, reason: preview.reason });
+        continue;
+      }
+
+      // Hard-broken (link reset / revoked / invalid). Remove immediately —
+      // this cron runs every hour, so dead links shouldn't linger.
+      if (!preview.ok) {
+        await client.query(
+          `UPDATE groups
+             SET status = 'removed',
+                 broken_since = COALESCE(broken_since, NOW()),
+                 last_checked_at = NOW()
+           WHERE id = $1`,
+          [row.id]
+        );
+        removed.push({
+          id: row.id,
+          link: row.link,
+          reason: preview.reason || "Link reset or revoked",
+        });
         continue;
       }
 
@@ -110,10 +100,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ok: true,
       checked: checked.length,
       removed: removed.length,
-      gracePeriod: grace.length,
-      graceDays: BROKEN_GRACE_DAYS,
+      skipped: skipped.length,
       removedDetails: removed,
-      graceDetails: grace,
+      skippedDetails: skipped,
     });
   } finally {
     client.release();
