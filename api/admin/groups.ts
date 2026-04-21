@@ -15,6 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     let q = `SELECT g.id, g.link, g.description, g.name, g.image_url, g.status,
                     g.last_checked_at, g.created_at,
+                    g.removed_reason, g.removed_at,
                     COUNT(r.id)::int AS report_count
              FROM groups g
              LEFT JOIN reports r ON r.group_id = g.id`;
@@ -36,6 +37,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status: r.status,
         lastCheckedAt: r.last_checked_at,
         createdAt: r.created_at,
+        removedReason: r.removed_reason ?? null,
+        removedAt: r.removed_at ?? null,
         reportCount: r.report_count,
       }))
     );
