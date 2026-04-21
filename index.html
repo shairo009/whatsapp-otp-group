@@ -1,17 +1,342 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <title>WhatsApp OTP Group</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WhatsApp OTP Group</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:#f0f4f3;color:#111827;line-height:1.5;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .container{max-width:1100px;margin:0 auto;padding:0 16px}
+  header{background:linear-gradient(135deg,#075e54,#128c7e);color:#fff;padding:32px 0 28px}
+  header h1{margin:0;font-size:28px;font-weight:800;letter-spacing:-.5px;display:flex;align-items:center;gap:10px}
+  header p{margin:6px 0 0;opacity:.9;font-size:14px}
+  .badge{display:inline-block;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-top:10px}
+  main{padding:28px 0 60px}
+  .section-title{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#075e54;margin:0 0 12px}
+  .card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:18px}
+  .submit-card{margin-bottom:24px}
+  .submit-card h2{margin:0 0 4px;font-size:18px;font-weight:700}
+  .submit-card .hint{margin:0 0 14px;font-size:13px;color:#6b7280}
+  .form-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .form-row input,.form-row textarea{flex:1;min-width:220px;padding:11px 13px;border:1.5px solid #e5e7eb;border-radius:10px;font:inherit;font-size:14px;background:#fff;transition:border-color .15s}
+  .form-row input:focus,.form-row textarea:focus{outline:none;border-color:#128c7e}
+  textarea{resize:vertical;min-height:60px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;border:none;font:inherit;font-weight:600;font-size:14px;cursor:pointer;transition:transform .08s,opacity .15s}
+  .btn:active{transform:scale(.97)}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .btn-primary{background:#25d366;color:#fff}
+  .btn-primary:hover:not(:disabled){background:#1faa52}
+  .btn-danger{background:#dc2626;color:#fff}
+  .btn-danger:hover:not(:disabled){background:#b91c1c}
+  .btn-ghost{background:#f3f4f6;color:#111827}
+  .btn-ghost:hover{background:#e5e7eb}
+  .preview{display:none;align-items:center;gap:12px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:10px}
+  .preview.show{display:flex}
+  .preview.error{background:#fef2f2;border-color:#fecaca}
+  .preview img{width:48px;height:48px;border-radius:50%;object-fit:cover;background:#e5e7eb;flex-shrink:0}
+  .preview .ptext{font-size:14px;font-weight:600;flex:1;min-width:0}
+  .preview .ptext small{display:block;color:#6b7280;font-weight:400;font-size:12px;margin-top:2px}
+  .msg{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:13px;display:none}
+  .msg.show{display:block}
+  .msg.success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+  .msg.error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .group-card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s}
+  .group-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.08)}
+  .group-head{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+  .group-dp{width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#075e54,#25d366);object-fit:cover;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px}
+  .group-dp img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+  .group-name{font-weight:700;font-size:16px;line-height:1.25;margin:0;word-break:break-word}
+  .group-meta{font-size:12px;color:#6b7280;margin-top:2px}
+  .group-desc{font-size:13px;color:#4b5563;margin:6px 0 14px;flex:1;word-break:break-word}
+  .group-actions{display:flex;flex-direction:column;gap:8px}
+  .empty{text-align:center;padding:40px 20px;color:#6b7280;background:#fff;border-radius:14px}
+  .loading{text-align:center;padding:30px;color:#6b7280}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal-bg.show{display:flex}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:420px;padding:22px}
+  .modal h3{margin:0 0 4px;font-size:18px}
+  .modal p{margin:0 0 14px;color:#6b7280;font-size:13px}
+  .modal label{display:block;margin-bottom:8px;font-size:13px}
+  .modal label input[type=radio]{margin-right:8px}
+  .modal textarea{width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:inherit;font-size:13px;margin-top:6px}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+
+  footer{padding:30px 0;text-align:center;color:#6b7280;font-size:13px}
+  footer a{color:#075e54;font-weight:600}
+  @media(max-width:480px){
+    header h1{font-size:22px}
+    .group-card{padding:14px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1s-.5-.1-.7.1-.8 1-1 1.2c-.2.2-.4.2-.7.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.1-.1.3-.4.5-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4s-1 1-1 2.4 1 2.8 1.2 3 2 3.1 4.9 4.4c2.9 1.2 2.9.8 3.4.8.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.1-.3-.2-.6-.4zM12 2.2C6.6 2.2 2.2 6.6 2.2 12c0 1.7.4 3.3 1.2 4.7L2 22l5.5-1.4c1.4.7 3 1.1 4.5 1.1 5.4 0 9.8-4.4 9.8-9.8S17.4 2.2 12 2.2zm0 17.7c-1.4 0-2.7-.4-3.9-1l-.3-.2-2.9.8.8-2.8-.2-.3c-.7-1.1-1.1-2.5-1.1-3.9 0-4.2 3.4-7.6 7.6-7.6S19.6 7.8 19.6 12s-3.4 7.9-7.6 7.9z"/></svg>
+      WhatsApp OTP Group
+    </h1>
+    <p>Free lifetime service — share &amp; receive OTP codes</p>
+    <span class="badge" id="liveCount">Loading groups…</span>
+  </div>
+</header>
+
+<main class="container">
+
+  <div class="card submit-card">
+    <h2>Submit your WhatsApp group</h2>
+    <p class="hint">Paste the invite link below. We'll auto-fetch the group name &amp; image, and verify the link is working.</p>
+    <div class="form-row">
+      <input id="linkInput" type="url" placeholder="https://chat.whatsapp.com/xxxxxxxxxx" autocomplete="off" />
+      <button class="btn btn-ghost" id="previewBtn" type="button">Preview</button>
+    </div>
+    <div class="preview" id="previewBox">
+      <img id="previewImg" alt="" />
+      <div class="ptext">
+        <span id="previewName">—</span>
+        <small id="previewStatus"></small>
+      </div>
+    </div>
+    <div class="form-row">
+      <textarea id="descInput" placeholder="Short description (optional)" maxlength="240"></textarea>
+    </div>
+    <button class="btn btn-primary" id="submitBtn" type="button">Submit for review</button>
+    <div class="msg" id="submitMsg"></div>
+  </div>
+
+  <h2 class="section-title">Active groups</h2>
+  <div id="groupsList" class="loading">Loading…</div>
+
+</main>
+
+<div class="modal-bg" id="reportModal">
+  <div class="modal">
+    <h3>Report this group</h3>
+    <p id="reportGroupName">Tell us what's wrong with this group.</p>
+    <div id="reasonList">
+      <label><input type="radio" name="reason" value="Admin only post" checked> Only admin can post</label>
+      <label><input type="radio" name="reason" value="Messages off"> Messages are turned off</label>
+      <label><input type="radio" name="reason" value="Link reset"> Link is reset / not working</label>
+      <label><input type="radio" name="reason" value="Spam / irrelevant"> Spam or irrelevant</label>
+      <label><input type="radio" name="reason" value="Other"> Other</label>
+    </div>
+    <textarea id="reportDetails" placeholder="Additional details (optional)" maxlength="500"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="reportCancel" type="button">Cancel</button>
+      <button class="btn btn-danger" id="reportSend" type="button">Send report</button>
+    </div>
+    <div class="msg" id="reportMsg" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<footer>
+  Built with care · <a href="/admin">Admin</a>
+</footer>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const linkInput = $('#linkInput');
+const previewBtn = $('#previewBtn');
+const previewBox = $('#previewBox');
+const previewImg = $('#previewImg');
+const previewName = $('#previewName');
+const previewStatus = $('#previewStatus');
+const submitBtn = $('#submitBtn');
+const submitMsg = $('#submitMsg');
+const groupsList = $('#groupsList');
+const liveCount = $('#liveCount');
+
+let currentPreview = null;
+let previewTimer = null;
+let activeReportGroup = null;
+
+function showMsg(el, kind, text){
+  el.className = 'msg show ' + kind;
+  el.textContent = text;
+}
+function hideMsg(el){ el.className = 'msg'; el.textContent=''; }
+
+function initials(name){
+  if(!name) return 'G';
+  const w = name.trim().split(/\s+/).slice(0,2);
+  return w.map(s=>s[0]).join('').toUpperCase();
+}
+
+async function fetchPreview(link){
+  hideMsg(submitMsg);
+  previewBox.classList.remove('show','error');
+  if(!link || !/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/.test(link)){
+    return;
+  }
+  previewBox.classList.add('show');
+  previewImg.removeAttribute('src');
+  previewName.textContent = 'Checking link…';
+  previewStatus.textContent = '';
+  try{
+    const r = await fetch('/api/groups/preview?link=' + encodeURIComponent(link));
+    const data = await r.json();
+    if(!data.ok){
+      previewBox.classList.add('error');
+      previewName.textContent = 'Link not working';
+      previewStatus.textContent = data.reason || data.error || 'Reset or invalid';
+      currentPreview = null;
+      return;
+    }
+    currentPreview = data;
+    previewName.textContent = data.name || 'WhatsApp Group';
+    previewStatus.textContent = 'Link verified ✓';
+    if(data.imageUrl){
+      previewImg.src = data.imageUrl;
+      previewImg.style.display='block';
+    } else {
+      previewImg.style.display='none';
+    }
+  }catch(e){
+    previewBox.classList.add('error');
+    previewName.textContent = 'Could not verify';
+    previewStatus.textContent = e.message;
+  }
+}
+
+linkInput.addEventListener('input', () => {
+  clearTimeout(previewTimer);
+  const v = linkInput.value.trim();
+  previewTimer = setTimeout(() => fetchPreview(v), 500);
+});
+previewBtn.addEventListener('click', () => fetchPreview(linkInput.value.trim()));
+
+submitBtn.addEventListener('click', async () => {
+  const link = linkInput.value.trim();
+  const description = $('#descInput').value.trim();
+  if(!/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/.test(link)){
+    showMsg(submitMsg, 'error', 'Please paste a valid WhatsApp group link.');
+    return;
+  }
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Submitting…';
+  hideMsg(submitMsg);
+  try{
+    const r = await fetch('/api/groups/submit', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ link, description })
+    });
+    const data = await r.json();
+    if(!r.ok){
+      showMsg(submitMsg, 'error', data.error || 'Submission failed');
+    } else {
+      showMsg(submitMsg, 'success', 'Submitted! Your group will appear after admin review.');
+      linkInput.value = '';
+      $('#descInput').value = '';
+      previewBox.classList.remove('show');
+    }
+  }catch(e){
+    showMsg(submitMsg, 'error', e.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit for review';
+  }
+});
+
+async function loadGroups(){
+  try{
+    const r = await fetch('/api/groups');
+    const data = await r.json();
+    if(!Array.isArray(data) || data.length === 0){
+      groupsList.className = '';
+      groupsList.innerHTML = '<div class="empty">No active groups yet. Be the first to submit one above!</div>';
+      liveCount.textContent = '0 active groups';
+      return;
+    }
+    liveCount.textContent = data.length + ' active group' + (data.length===1?'':'s');
+    groupsList.className = 'grid';
+    groupsList.innerHTML = data.map(g => groupCardHTML(g)).join('');
+    groupsList.querySelectorAll('[data-report]').forEach(btn => {
+      btn.addEventListener('click', () => openReport(btn.dataset.report, btn.dataset.name));
+    });
+  }catch(e){
+    groupsList.className = '';
+    groupsList.innerHTML = '<div class="empty">Failed to load groups: '+e.message+'</div>';
+  }
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function groupCardHTML(g){
+  const name = g.name || 'WhatsApp Group';
+  const dp = g.imageUrl
+    ? `<div class="group-dp"><img src="${escapeHtml(g.imageUrl)}" alt="" onerror="this.outerHTML='${initials(name)}'"></div>`
+    : `<div class="group-dp">${initials(name)}</div>`;
+  return `
+    <div class="group-card">
+      <div class="group-head">
+        ${dp}
+        <div style="min-width:0">
+          <p class="group-name">${escapeHtml(name)}</p>
+          <div class="group-meta">Verified ✓</div>
+        </div>
+      </div>
+      ${g.description ? `<p class="group-desc">${escapeHtml(g.description)}</p>` : '<div style="flex:1"></div>'}
+      <div class="group-actions">
+        <a class="btn btn-primary" href="${escapeHtml(g.link)}" target="_blank" rel="noopener">Join group</a>
+        <button class="btn btn-danger" data-report="${g.id}" data-name="${escapeHtml(name)}" type="button">Report — Admin only / Issue</button>
+      </div>
+    </div>`;
+}
+
+function openReport(id, name){
+  activeReportGroup = id;
+  $('#reportGroupName').textContent = 'Reporting: ' + name;
+  $('#reportDetails').value = '';
+  hideMsg($('#reportMsg'));
+  document.querySelectorAll('input[name=reason]').forEach((r,i) => r.checked = i===0);
+  $('#reportModal').classList.add('show');
+}
+$('#reportCancel').addEventListener('click', () => $('#reportModal').classList.remove('show'));
+$('#reportModal').addEventListener('click', (e) => {
+  if(e.target.id === 'reportModal') $('#reportModal').classList.remove('show');
+});
+$('#reportSend').addEventListener('click', async () => {
+  const reason = document.querySelector('input[name=reason]:checked').value;
+  const details = $('#reportDetails').value.trim();
+  const btn = $('#reportSend');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try{
+    const r = await fetch('/api/groups/report', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId: activeReportGroup, reason, details })
+    });
+    const data = await r.json();
+    if(!r.ok){
+      showMsg($('#reportMsg'),'error',data.error||'Report failed');
+    } else {
+      showMsg($('#reportMsg'),'success','Thanks — admin will review this report.');
+      setTimeout(() => $('#reportModal').classList.remove('show'), 1200);
+    }
+  }catch(e){
+    showMsg($('#reportMsg'),'error',e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send report';
+  }
+});
+
+loadGroups();
+</script>
+</body>
 </html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin — WhatsApp OTP Group</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#0f172a;color:#e2e8f0}
+  .container{max-width:1200px;margin:0 auto;padding:20px 16px}
+  header{background:#1e293b;border-bottom:1px solid #334155;padding:18px 0}
+  header h1{margin:0;font-size:20px;font-weight:800}
+  header .sub{color:#94a3b8;font-size:13px;margin-top:2px}
+  .key-bar{display:flex;gap:8px;margin:14px 0 8px}
+  .key-bar input{flex:1;padding:10px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;border-radius:8px;font:inherit}
+  .btn{padding:10px 16px;border-radius:8px;border:none;font:inherit;font-weight:600;cursor:pointer;font-size:13px}
+  .btn-primary{background:#25d366;color:#062b14}
+  .btn-danger{background:#dc2626;color:#fff}
+  .btn-warn{background:#f59e0b;color:#1a0e00}
+  .btn-ghost{background:#334155;color:#e2e8f0}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .tabs{display:flex;gap:4px;margin:18px 0 12px;border-bottom:1px solid #334155}
+  .tab{padding:10px 14px;cursor:pointer;font-size:14px;font-weight:600;color:#94a3b8;border-bottom:2px solid transparent}
+  .tab.active{color:#25d366;border-color:#25d366}
+  .badge{display:inline-block;background:#dc2626;color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:6px;font-weight:700}
+  .panel{display:none}
+  .panel.active{display:block}
+  .row{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  .dp{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#075e54,#25d366);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;overflow:hidden}
+  .dp img{width:100%;height:100%;object-fit:cover}
+  .meta{flex:1;min-width:200px}
+  .meta .name{font-weight:700;font-size:15px;margin-bottom:2px}
+  .meta .desc{font-size:13px;color:#cbd5e1;margin:4px 0}
+  .meta .small{font-size:12px;color:#94a3b8;word-break:break-all}
+  .meta a{color:#67e8f9}
+  .actions{display:flex;gap:6px;flex-wrap:wrap}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600}
+  .pill.pending{background:#f59e0b22;color:#fbbf24}
+  .pill.approved{background:#25d36622;color:#4ade80}
+  .pill.removed{background:#dc262622;color:#fca5a5}
+  .pill.reports{background:#dc262633;color:#fca5a5;margin-left:6px}
+  .empty{padding:30px;text-align:center;color:#64748b;background:#1e293b;border-radius:10px}
+  .reason{font-weight:700;color:#fbbf24}
+  .details{font-size:13px;color:#cbd5e1;margin-top:4px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;padding:10px 16px;border-radius:8px;font-size:13px;display:none}
+  .toast.show{display:block}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <h1>Admin Panel</h1>
+    <div class="sub">WhatsApp OTP Group · review submissions, reports & manage groups</div>
+  </div>
+</header>
+
+<main class="container">
+  <div class="key-bar">
+    <input id="adminKey" type="password" placeholder="Admin key" autocomplete="off" />
+    <button class="btn btn-primary" id="loginBtn">Load</button>
+    <button class="btn btn-warn" id="cronBtn" title="Manually run the 5-day verification">Run verify now</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="pending">Pending <span id="cPending" class="badge" style="display:none"></span></div>
+    <div class="tab" data-tab="reports">Reports <span id="cReports" class="badge" style="display:none"></span></div>
+    <div class="tab" data-tab="approved">Approved</div>
+    <div class="tab" data-tab="removed">Removed</div>
+  </div>
+
+  <div id="panel-pending" class="panel active"></div>
+  <div id="panel-reports" class="panel"></div>
+  <div id="panel-approved" class="panel"></div>
+  <div id="panel-removed" class="panel"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const KEY_STORAGE = 'wog_admin_key';
+let key = '';
+
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2000);
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function initials(name){ if(!name) return 'G'; return name.trim().split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase(); }
+function dpHTML(g){
+  return g.imageUrl
+    ? `<div class="dp"><img src="${escapeHtml(g.imageUrl)}" onerror="this.outerHTML='${initials(g.name)}'"></div>`
+    : `<div class="dp">${initials(g.name)}</div>`;
+}
+
+async function api(path, opts={}){
+  const u = new URL(path, location.origin);
+  if(!opts.headers) opts.headers = {};
+  opts.headers['X-Admin-Key'] = key;
+  if(opts.body) opts.headers['Content-Type']='application/json';
+  const r = await fetch(u, opts);
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(data.error || ('HTTP '+r.status));
+  return data;
+}
+
+async function loadAll(){
+  if(!key) return;
+  try{
+    const [groups, reports] = await Promise.all([
+      api('/api/admin/groups'),
+      api('/api/admin/reports'),
+    ]);
+    renderGroups(groups);
+    renderReports(reports);
+  }catch(e){
+    toast('Load failed: '+e.message);
+  }
+}
+
+function renderGroups(groups){
+  const pending = groups.filter(g=>g.status==='pending');
+  const approved = groups.filter(g=>g.status==='approved');
+  const removed = groups.filter(g=>g.status==='removed');
+
+  $('#cPending').textContent = pending.length;
+  $('#cPending').style.display = pending.length ? 'inline-block' : 'none';
+
+  $('#panel-pending').innerHTML = pending.length
+    ? pending.map(g=>groupRow(g, ['approve','delete'])).join('')
+    : '<div class="empty">No pending submissions.</div>';
+  $('#panel-approved').innerHTML = approved.length
+    ? approved.map(g=>groupRow(g, ['remove','delete'])).join('')
+    : '<div class="empty">No approved groups.</div>';
+  $('#panel-removed').innerHTML = removed.length
+    ? removed.map(g=>groupRow(g, ['approve','delete'])).join('')
+    : '<div class="empty">No removed groups.</div>';
+
+  document.querySelectorAll('[data-action]').forEach(b=>{
+    b.addEventListener('click', () => doAction(b.dataset.action, b.dataset.id));
+  });
+}
+
+function groupRow(g, actions){
+  const name = g.name || 'WhatsApp Group';
+  const reportPill = g.reportCount ? `<span class="pill reports">${g.reportCount} report${g.reportCount>1?'s':''}</span>`:'';
+  const lastChecked = g.lastCheckedAt ? new Date(g.lastCheckedAt).toLocaleString() : 'never';
+  const btns = actions.map(a=>{
+    if(a==='approve') return `<button class="btn btn-primary" data-action="approve" data-id="${g.id}">Approve</button>`;
+    if(a==='remove')  return `<button class="btn btn-warn"   data-action="remove"  data-id="${g.id}">Remove</button>`;
+    if(a==='delete')  return `<button class="btn btn-danger" data-action="delete"  data-id="${g.id}">Delete</button>`;
+  }).join('');
+  return `
+    <div class="row">
+      ${dpHTML({...g,name})}
+      <div class="meta">
+        <div class="name">${escapeHtml(name)} <span class="pill ${g.status}">${g.status}</span>${reportPill}</div>
+        ${g.description?`<div class="desc">${escapeHtml(g.description)}</div>`:''}
+        <div class="small"><a href="${escapeHtml(g.link)}" target="_blank">${escapeHtml(g.link)}</a></div>
+        <div class="small">Last verified: ${lastChecked} · Submitted: ${new Date(g.createdAt).toLocaleString()}</div>
+      </div>
+      <div class="actions">${btns}</div>
+    </div>`;
+}
+
+function renderReports(reports){
+  $('#cReports').textContent = reports.length;
+  $('#cReports').style.display = reports.length ? 'inline-block' : 'none';
+  $('#panel-reports').innerHTML = reports.length
+    ? reports.map(r=>reportRow(r)).join('')
+    : '<div class="empty">No reports yet.</div>';
+  document.querySelectorAll('[data-rep-action]').forEach(b=>{
+    b.addEventListener('click', () => doReportAction(b.dataset.repAction, b.dataset.id, b.dataset.gid));
+  });
+}
+
+function reportRow(r){
+  const g = r.group;
+  return `
+    <div class="row">
+      ${dpHTML(g)}
+      <div class="meta">
+        <div class="name">${escapeHtml(g.name||'WhatsApp Group')} <span class="pill ${g.status}">${g.status}</span></div>
+        <div class="reason">⚠ ${escapeHtml(r.reason)}</div>
+        ${r.details?`<div class="details">"${escapeHtml(r.details)}"</div>`:''}
+        <div class="small"><a href="${escapeHtml(g.link)}" target="_blank">${escapeHtml(g.link)}</a></div>
+        <div class="small">Reported: ${new Date(r.createdAt).toLocaleString()}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-warn" data-rep-action="remove-group" data-gid="${r.groupId}">Remove group</button>
+        <button class="btn btn-ghost" data-rep-action="dismiss" data-id="${r.id}">Dismiss</button>
+        <button class="btn btn-ghost" data-rep-action="clear-all" data-gid="${r.groupId}">Clear all reports for this group</button>
+      </div>
+    </div>`;
+}
+
+async function doAction(action, id){
+  if((action==='delete') && !confirm('Delete this group permanently?')) return;
+  try{
+    await api('/api/admin/action',{method:'POST',body:JSON.stringify({action,groupId:Number(id)})});
+    toast('Done');
+    loadAll();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+async function doReportAction(action, id, gid){
+  try{
+    if(action==='dismiss'){
+      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'dismiss-report',reportId:Number(id)})});
+    } else if(action==='clear-all'){
+      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'clear-reports',groupId:Number(gid)})});
+    } else if(action==='remove-group'){
+      if(!confirm('Remove this group from public listing?')) return;
+      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'remove',groupId:Number(gid)})});
+    }
+    toast('Done');
+    loadAll();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    $('#panel-'+t.dataset.tab).classList.add('active');
+  });
+});
+
+$('#loginBtn').addEventListener('click', () => {
+  key = $('#adminKey').value.trim();
+  if(!key) return toast('Enter admin key');
+  localStorage.setItem(KEY_STORAGE, key);
+  loadAll();
+});
+$('#cronBtn').addEventListener('click', async () => {
+  if(!key) return toast('Enter admin key first');
+  if(!confirm('Run verification on all approved groups now? Dead links will be auto-removed.')) return;
+  $('#cronBtn').disabled = true;
+  $('#cronBtn').textContent = 'Running…';
+  try{
+    const r = await fetch('/api/cron/verify?key='+encodeURIComponent(key));
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error||'Failed');
+    toast(`Checked ${data.checked} · Removed ${data.removed}`);
+    loadAll();
+  }catch(e){ toast('Failed: '+e.message); }
+  finally{ $('#cronBtn').disabled=false; $('#cronBtn').textContent='Run verify now'; }
+});
+
+const saved = localStorage.getItem(KEY_STORAGE);
+if(saved){ key = saved; $('#adminKey').value = saved; loadAll(); }
+</script>
+</body>
+</html>
