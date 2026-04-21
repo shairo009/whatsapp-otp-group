@@ -20,28 +20,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const client = await getPool().connect();
   const checked: any[] = [];
   const removed: any[] = [];
+  const grace: any[] = [];
+  const BROKEN_GRACE_DAYS = 5;
   try {
+    // Ensure broken_since column exists (idempotent migration)
+    await client.query(
+      "ALTER TABLE groups ADD COLUMN IF NOT EXISTS broken_since TIMESTAMP"
+    );
+
     const result = await client.query(
-      `SELECT id, link, name FROM groups
+      `SELECT id, link, name, broken_since FROM groups
        WHERE status IN ('approved','pending')
        ORDER BY id ASC LIMIT 200`
     );
 
     for (const row of result.rows) {
       const preview = await fetchGroupPreview(row.link);
+
+      // Hard-broken (link reset/revoked/invalid). Apply 5-day grace period:
+      // mark broken_since on first detection; only remove after 5 days of
+      // continuous failure.
       if (!preview.ok && !preview.rateLimited) {
-        await client.query(
-          "UPDATE groups SET status = 'removed', last_checked_at = NOW() WHERE id = $1",
-          [row.id]
-        );
-        removed.push({ id: row.id, link: row.link, reason: preview.reason });
+        if (!row.broken_since) {
+          await client.query(
+            "UPDATE groups SET broken_since = NOW(), last_checked_at = NOW() WHERE id = $1",
+            [row.id]
+          );
+          grace.push({ id: row.id, link: row.link, reason: preview.reason, day: 1 });
+        } else {
+          const ageMs = Date.now() - new Date(row.broken_since).getTime();
+          const ageDays = ageMs / (1000 * 60 * 60 * 24);
+          if (ageDays >= BROKEN_GRACE_DAYS) {
+            await client.query(
+              "UPDATE groups SET status = 'removed', last_checked_at = NOW() WHERE id = $1",
+              [row.id]
+            );
+            removed.push({
+              id: row.id,
+              link: row.link,
+              reason: `${preview.reason} (broken > ${BROKEN_GRACE_DAYS} days)`,
+            });
+          } else {
+            await client.query(
+              "UPDATE groups SET last_checked_at = NOW() WHERE id = $1",
+              [row.id]
+            );
+            grace.push({
+              id: row.id,
+              link: row.link,
+              reason: preview.reason,
+              day: Math.ceil(ageDays),
+            });
+          }
+        }
         continue;
       }
 
       const effectiveName = preview.name ?? row.name;
       // Enforce OTP-only policy. If we have a name and it doesn't contain OTP,
-      // remove. If the name is still null after a successful (non-rate-limited)
-      // fetch, also remove — we can't confirm it's an OTP group.
+      // remove immediately. If the name is still null after a successful
+      // (non-rate-limited) fetch, also remove — we can't confirm it's OTP.
       const knowName = !!effectiveName;
       const isOtp = nameContainsOTP(effectiveName);
       if ((knowName && !isOtp) || (!knowName && !preview.rateLimited)) {
@@ -57,9 +95,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         continue;
       }
 
+      // Healthy — clear broken_since if set, refresh metadata.
       await client.query(
         `UPDATE groups SET name = COALESCE($2, name),
                             image_url = COALESCE($3, image_url),
+                            broken_since = NULL,
                             last_checked_at = NOW()
          WHERE id = $1`,
         [row.id, preview.name, preview.imageUrl]
@@ -70,7 +110,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ok: true,
       checked: checked.length,
       removed: removed.length,
+      gracePeriod: grace.length,
+      graceDays: BROKEN_GRACE_DAYS,
       removedDetails: removed,
+      graceDetails: grace,
     });
   } finally {
     client.release();
