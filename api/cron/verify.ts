@@ -29,9 +29,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const recovered: any[] = [];
   const skipped: any[] = [];
   try {
-    // Ensure broken_since column exists (idempotent migration)
+    // Ensure broken_since + removed_reason columns exist (idempotent migration)
     await client.query(
       "ALTER TABLE groups ADD COLUMN IF NOT EXISTS broken_since TIMESTAMP"
+    );
+    await client.query(
+      "ALTER TABLE groups ADD COLUMN IF NOT EXISTS removed_reason TEXT"
+    );
+    await client.query(
+      "ALTER TABLE groups ADD COLUMN IF NOT EXISTS removed_at TIMESTAMP"
     );
 
     // Tunable via query params so an external scheduler can throttle.
@@ -80,24 +86,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         continue;
       }
 
-      // HARD broken (explicit revoked/invalid markers, no metadata at all,
-      // invalid format, etc.) — remove immediately.
+      // HARD broken — only when WhatsApp itself returned an explicit
+      // "link reset / revoked / invalid" marker. Anything else (HTTP
+      // errors, weird preview shapes) goes through the soft-broken grace
+      // path so we never remove a working link due to a flaky fetch.
       const isHardBroken =
-        !preview.ok && !preview.softBroken && !preview.rateLimited;
+        !preview.ok &&
+        !preview.softBroken &&
+        !preview.rateLimited &&
+        preview.reason === "Link reset or revoked";
       if (isHardBroken) {
+        const reason = preview.reason || "Link reset or revoked";
         await client.query(
           `UPDATE groups
              SET status = 'removed',
                  broken_since = COALESCE(broken_since, NOW()),
+                 removed_reason = $2,
+                 removed_at = NOW(),
                  last_checked_at = NOW()
            WHERE id = $1`,
-          [row.id]
+          [row.id, reason]
         );
-        removed.push({
-          id: row.id,
-          link: row.link,
-          reason: preview.reason || "Link reset or revoked",
-        });
+        removed.push({ id: row.id, link: row.link, reason });
+        continue;
+      }
+
+      // Any other non-ok, non-softBroken, non-rateLimited result (e.g. an
+      // unexpected HTTP code) — treat as soft-broken so we give it grace.
+      if (!preview.ok && !preview.softBroken && !preview.rateLimited) {
+        const brokenSince: Date | null = row.broken_since
+          ? new Date(row.broken_since)
+          : null;
+        const ageHours = brokenSince
+          ? (Date.now() - brokenSince.getTime()) / 3_600_000
+          : 0;
+        if (brokenSince && ageHours >= graceHours) {
+          const reason = `Unreachable for ${Math.round(ageHours)}h: ${preview.reason || "fetch failed"}`;
+          await client.query(
+            `UPDATE groups
+               SET status = 'removed',
+                   removed_reason = $2,
+                   removed_at = NOW(),
+                   last_checked_at = NOW()
+             WHERE id = $1`,
+            [row.id, reason]
+          );
+          removed.push({ id: row.id, link: row.link, reason });
+        } else {
+          await client.query(
+            `UPDATE groups
+               SET broken_since = COALESCE(broken_since, NOW()),
+                   last_checked_at = NOW()
+             WHERE id = $1`,
+            [row.id]
+          );
+          softBroken.push({
+            id: row.id,
+            link: row.link,
+            reason: preview.reason,
+            ageHours: Math.round(ageHours * 10) / 10,
+          });
+        }
         continue;
       }
 
@@ -113,18 +162,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           : 0;
 
         if (brokenSince && ageHours >= graceHours) {
+          const reason = `Soft-broken for ${Math.round(ageHours)}h: ${preview.reason}`;
           await client.query(
             `UPDATE groups
                SET status = 'removed',
+                   removed_reason = $2,
+                   removed_at = NOW(),
                    last_checked_at = NOW()
              WHERE id = $1`,
-            [row.id]
+            [row.id, reason]
           );
-          removed.push({
-            id: row.id,
-            link: row.link,
-            reason: `Soft-broken for ${Math.round(ageHours)}h: ${preview.reason}`,
-          });
+          removed.push({ id: row.id, link: row.link, reason });
         } else {
           await client.query(
             `UPDATE groups
@@ -149,28 +197,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const isOtp = nameContainsOTP(effectiveName);
 
       // OTP policy:
-      //   - If we KNOW the name and it doesn't contain OTP → remove.
-      //   - If we don't know the name (rare with the new fetcher), DO NOT
-      //     remove on this run. Just refresh metadata; we'll catch it later.
-      if (knowName && !isOtp) {
+      //   - Only remove when we're confident: name is known AND we saw a
+      //     real member count on the page (so the name is trustworthy)
+      //     AND the name doesn't contain OTP.
+      //   - If anything is uncertain (no name, or no member count), DO NOT
+      //     remove. Just refresh metadata; we'll catch it later.
+      if (knowName && preview.hasMembers && !isOtp) {
+        const reason = `Not an OTP group (current name: "${effectiveName}")`;
         await client.query(
-          "UPDATE groups SET status = 'removed', last_checked_at = NOW() WHERE id = $1",
-          [row.id]
+          `UPDATE groups
+             SET status = 'removed',
+                 removed_reason = $2,
+                 removed_at = NOW(),
+                 last_checked_at = NOW()
+           WHERE id = $1`,
+          [row.id, reason]
         );
-        removed.push({
-          id: row.id,
-          link: row.link,
-          reason: "Not an OTP group",
-        });
+        removed.push({ id: row.id, link: row.link, reason });
         continue;
       }
 
-      // Healthy — clear broken_since if set, refresh metadata.
+      // Healthy — clear broken_since / removed_reason, refresh metadata.
       const wasBroken = !!row.broken_since;
       await client.query(
         `UPDATE groups SET name = COALESCE($2, name),
                             image_url = COALESCE($3, image_url),
                             broken_since = NULL,
+                            removed_reason = NULL,
+                            removed_at = NULL,
                             last_checked_at = NOW()
          WHERE id = $1`,
         [row.id, preview.name, preview.imageUrl]
