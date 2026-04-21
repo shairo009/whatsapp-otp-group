@@ -5,6 +5,7 @@ import {
   isValidWhatsAppLink,
   extractWhatsAppLinks,
   nameContainsOTP,
+  normalizeName,
 } from "../_lib/whatsapp";
 
 const MAX_LINKS = 40;
@@ -68,22 +69,30 @@ async function processOne(
     }
 
     // Same group with a different invite link? Reject if a non-removed entry
-    // already exists with the same (case-insensitive) name.
+    // already exists with a name that normalizes to the same key. We do the
+    // comparison in JS (not SQL) so that fancy unicode, strikethrough,
+    // homoglyphs, zero-width chars, emoji separators etc. all collapse to
+    // the same canonical form — e.g. "O̶ T̶ P̶ Group", "𝐎𝐓𝐏 group" and
+    // "OTP-Group" are all treated as the same group.
     if (preview.name) {
-      const sameName = await client.query(
-        `SELECT id, status FROM groups
-         WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
-           AND status IN ('approved','pending')
-         LIMIT 1`,
-        [preview.name]
-      );
-      if (sameName.rows.length > 0) {
-        return {
-          link,
-          status: "duplicate",
-          existingStatus: sameName.rows[0].status,
-          reason: "Same group already listed under another invite link",
-        };
+      const candidateKey = normalizeName(preview.name);
+      if (candidateKey) {
+        const all = await client.query(
+          `SELECT id, status, name FROM groups
+           WHERE status IN ('approved','pending')`
+        );
+        const match = all.rows.find(
+          (r: { id: number; status: string; name: string | null }) =>
+            normalizeName(r.name) === candidateKey
+        );
+        if (match) {
+          return {
+            link,
+            status: "duplicate",
+            existingStatus: match.status,
+            reason: "Same group already listed under another invite link",
+          };
+        }
       }
     }
 
