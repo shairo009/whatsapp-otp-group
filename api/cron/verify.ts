@@ -22,27 +22,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const removed: any[] = [];
   try {
     const result = await client.query(
-      `SELECT id, link FROM groups WHERE status = 'approved' ORDER BY id ASC LIMIT 200`
+      `SELECT id, link, name FROM groups
+       WHERE status IN ('approved','pending')
+       ORDER BY id ASC LIMIT 200`
     );
 
     for (const row of result.rows) {
       const preview = await fetchGroupPreview(row.link);
-      if (!preview.ok) {
+      if (!preview.ok && !preview.rateLimited) {
         await client.query(
           "UPDATE groups SET status = 'removed', last_checked_at = NOW() WHERE id = $1",
           [row.id]
         );
         removed.push({ id: row.id, link: row.link, reason: preview.reason });
-      } else {
-        await client.query(
-          `UPDATE groups SET name = COALESCE($2, name),
-                              image_url = COALESCE($3, image_url),
-                              last_checked_at = NOW()
-           WHERE id = $1`,
-          [row.id, preview.name, preview.imageUrl]
-        );
-        checked.push({ id: row.id, link: row.link });
+        continue;
       }
+
+      const effectiveName = preview.name ?? row.name;
+      // Enforce OTP-only policy: if we know the name and it doesn't say OTP, remove.
+      if (effectiveName && !/otp/i.test(effectiveName)) {
+        await client.query(
+          "UPDATE groups SET status = 'removed', last_checked_at = NOW() WHERE id = $1",
+          [row.id]
+        );
+        removed.push({ id: row.id, link: row.link, reason: "Not an OTP group" });
+        continue;
+      }
+
+      await client.query(
+        `UPDATE groups SET name = COALESCE($2, name),
+                            image_url = COALESCE($3, image_url),
+                            last_checked_at = NOW()
+         WHERE id = $1`,
+        [row.id, preview.name, preview.imageUrl]
+      );
+      checked.push({ id: row.id, link: row.link });
     }
     return res.json({
       ok: true,
