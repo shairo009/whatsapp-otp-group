@@ -12,7 +12,19 @@ const INVALID_MARKERS = [
   "this invite link is invalid",
   "link is invalid",
   "reset by an admin",
+  "this link has been revoked",
+  "no longer available",
 ];
+
+// These og:titles mean the link is broken/reset — WhatsApp falls back to
+// its own brand name when a group no longer exists behind the URL.
+const GENERIC_TITLES = new Set([
+  "whatsapp",
+  "whatsapp group invite",
+  "join whatsapp group",
+  "whatsapp group",
+  "whatsapp messenger",
+]);
 
 const LINK_RE = /https?:\/\/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})/gi;
 
@@ -28,20 +40,11 @@ function pickUA(): string {
 }
 
 function decodeHtml(s: string): string {
-  // Numeric entities first: &#1234; and &#xABCD;
   let out = s.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
-    try {
-      return String.fromCodePoint(parseInt(hex, 16));
-    } catch {
-      return _;
-    }
+    try { return String.fromCodePoint(parseInt(hex, 16)); } catch { return _; }
   });
   out = out.replace(/&#(\d+);/g, (_, dec) => {
-    try {
-      return String.fromCodePoint(parseInt(dec, 10));
-    } catch {
-      return _;
-    }
+    try { return String.fromCodePoint(parseInt(dec, 10)); } catch { return _; }
   });
   return out
     .replace(/&amp;/g, "&")
@@ -52,29 +55,25 @@ function decodeHtml(s: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
-// Normalize fancy unicode letters (mathematical alphanumeric symbols U+1D400–U+1D7FF)
-// to plain ASCII, so "𝕋ℝ𝕆..." becomes "TRO..." for OTP matching.
 function normalizeFancy(s: string): string {
   let out = "";
   for (const ch of s) {
     const cp = ch.codePointAt(0)!;
-    // Mathematical alphanumeric symbols
     if (cp >= 0x1d400 && cp <= 0x1d7ff) {
-      // Map to nearest A-Z / a-z / 0-9
       const offsets: Array<[number, number, string]> = [
-        [0x1d400, 0x1d419, "A"], [0x1d41a, 0x1d433, "a"], // bold
-        [0x1d434, 0x1d44d, "A"], [0x1d44e, 0x1d467, "a"], // italic
-        [0x1d468, 0x1d481, "A"], [0x1d482, 0x1d49b, "a"], // bold italic
-        [0x1d49c, 0x1d4b5, "A"], [0x1d4b6, 0x1d4cf, "a"], // script
-        [0x1d4d0, 0x1d4e9, "A"], [0x1d4ea, 0x1d503, "a"], // bold script
-        [0x1d504, 0x1d51d, "A"], [0x1d51e, 0x1d537, "a"], // fraktur
-        [0x1d538, 0x1d551, "A"], [0x1d552, 0x1d56b, "a"], // double-struck
-        [0x1d56c, 0x1d585, "A"], [0x1d586, 0x1d59f, "a"], // bold fraktur
-        [0x1d5a0, 0x1d5b9, "A"], [0x1d5ba, 0x1d5d3, "a"], // sans
-        [0x1d5d4, 0x1d5ed, "A"], [0x1d5ee, 0x1d607, "a"], // sans bold
-        [0x1d608, 0x1d621, "A"], [0x1d622, 0x1d63b, "a"], // sans italic
-        [0x1d63c, 0x1d655, "A"], [0x1d656, 0x1d66f, "a"], // sans bold italic
-        [0x1d670, 0x1d689, "A"], [0x1d68a, 0x1d6a3, "a"], // monospace
+        [0x1d400, 0x1d419, "A"], [0x1d41a, 0x1d433, "a"],
+        [0x1d434, 0x1d44d, "A"], [0x1d44e, 0x1d467, "a"],
+        [0x1d468, 0x1d481, "A"], [0x1d482, 0x1d49b, "a"],
+        [0x1d49c, 0x1d4b5, "A"], [0x1d4b6, 0x1d4cf, "a"],
+        [0x1d4d0, 0x1d4e9, "A"], [0x1d4ea, 0x1d503, "a"],
+        [0x1d504, 0x1d51d, "A"], [0x1d51e, 0x1d537, "a"],
+        [0x1d538, 0x1d551, "A"], [0x1d552, 0x1d56b, "a"],
+        [0x1d56c, 0x1d585, "A"], [0x1d586, 0x1d59f, "a"],
+        [0x1d5a0, 0x1d5b9, "A"], [0x1d5ba, 0x1d5d3, "a"],
+        [0x1d5d4, 0x1d5ed, "A"], [0x1d5ee, 0x1d607, "a"],
+        [0x1d608, 0x1d621, "A"], [0x1d622, 0x1d63b, "a"],
+        [0x1d63c, 0x1d655, "A"], [0x1d656, 0x1d66f, "a"],
+        [0x1d670, 0x1d689, "A"], [0x1d68a, 0x1d6a3, "a"],
         [0x1d7ce, 0x1d7d7, "0"], [0x1d7d8, 0x1d7e1, "0"],
         [0x1d7e2, 0x1d7eb, "0"], [0x1d7ec, 0x1d7f5, "0"],
         [0x1d7f6, 0x1d7ff, "0"],
@@ -119,11 +118,6 @@ export function isValidWhatsAppLink(link: string): boolean {
   return /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{10,}$/.test(link.trim());
 }
 
-/**
- * Extract all unique, normalized WhatsApp invite links from arbitrary text.
- * Ignores everything that isn't a valid WhatsApp invite URL — so users can
- * paste messages, captions, mixed content, etc.
- */
 export function extractWhatsAppLinks(text: string): string[] {
   if (!text || typeof text !== "string") return [];
   const seen = new Set<string>();
@@ -174,7 +168,6 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
     return { ok: false, name: null, imageUrl: null, reason: "Invalid link format" };
   }
 
-  // Up to 3 attempts. Retry on 429 / 5xx with exponential backoff + jitter.
   const maxAttempts = 3;
   let lastStatus = 0;
   let lastError: string | undefined;
@@ -191,6 +184,7 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
       const html = r.html;
       const lower = html.toLowerCase();
 
+      // Check for explicit invalid/revoked markers in page body
       for (const marker of INVALID_MARKERS) {
         if (lower.includes(marker)) {
           return { ok: false, name: null, imageUrl: null, reason: "Link reset or revoked" };
@@ -200,18 +194,26 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
       const ogTitle = metaContent(html, "og:title");
       const ogImage = metaContent(html, "og:image");
 
+      // No metadata at all → broken link
       if (!ogTitle && !ogImage) {
         return { ok: false, name: null, imageUrl: null, reason: "No group preview available" };
       }
 
-      const name =
-        ogTitle &&
-        ogTitle.toLowerCase() !== "whatsapp" &&
-        ogTitle.toLowerCase() !== "whatsapp group invite"
-          ? ogTitle
-          : null;
+      // --- KEY FIX ---
+      // If og:title is a generic WhatsApp brand title (not a real group name),
+      // the invite link is broken/reset. WhatsApp always sets a specific group
+      // name as og:title for valid links. A generic title = dead link.
+      if (!ogTitle || GENERIC_TITLES.has(ogTitle.toLowerCase().trim())) {
+        return {
+          ok: false,
+          name: null,
+          imageUrl: null,
+          reason: "Link reset or revoked (no group name in preview)",
+        };
+      }
 
-      return { ok: true, name, imageUrl: ogImage || null };
+      // We have a real, specific group name → valid link
+      return { ok: true, name: ogTitle, imageUrl: ogImage || null };
     }
 
     if (!transient) {
