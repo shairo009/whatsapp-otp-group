@@ -67,6 +67,26 @@ async function processOne(
       };
     }
 
+    // Same group with a different invite link? Reject if a non-removed entry
+    // already exists with the same (case-insensitive) name.
+    if (preview.name) {
+      const sameName = await client.query(
+        `SELECT id, status FROM groups
+         WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+           AND status IN ('approved','pending')
+         LIMIT 1`,
+        [preview.name]
+      );
+      if (sameName.rows.length > 0) {
+        return {
+          link,
+          status: "duplicate",
+          existingStatus: sameName.rows[0].status,
+          reason: "Same group already listed under another invite link",
+        };
+      }
+    }
+
     const result = await client.query(
       `INSERT INTO groups (link, description, name, image_url, status, last_checked_at)
        VALUES ($1, $2, $3, $4, 'pending', NOW())
