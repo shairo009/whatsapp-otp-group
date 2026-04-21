@@ -27,13 +27,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       "ALTER TABLE groups ADD COLUMN IF NOT EXISTS broken_since TIMESTAMP"
     );
 
+    // Tunable via query params so an external scheduler can throttle.
+    // Defaults are conservative to avoid WhatsApp blocking us.
+    const limitRaw = parseInt(String(req.query.limit ?? "25"), 10);
+    const delayRaw = parseInt(String(req.query.delay ?? "800"), 10);
+    const limit = Math.min(100, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 25));
+    const delayMs = Math.min(5000, Math.max(0, Number.isFinite(delayRaw) ? delayRaw : 800));
+
     const result = await client.query(
       `SELECT id, link, name, broken_since FROM groups
        WHERE status IN ('approved','pending')
-       ORDER BY id ASC LIMIT 200`
+       ORDER BY last_checked_at ASC NULLS FIRST, id ASC
+       LIMIT $1`,
+      [limit]
     );
 
+    const sleep = (ms: number) =>
+      ms > 0 ? new Promise<void>((r) => setTimeout(r, ms)) : Promise.resolve();
+
+    let first = true;
     for (const row of result.rows) {
+      // Spread requests to chat.whatsapp.com so we don't get blocked.
+      // Add a small jitter on top of the base delay.
+      if (!first) {
+        const jitter = Math.floor(Math.random() * 400);
+        await sleep(delayMs + jitter);
+      }
+      first = false;
+
       const preview = await fetchGroupPreview(row.link);
 
       // Transient failure (rate-limit / 5xx). Don't punish the group; try
