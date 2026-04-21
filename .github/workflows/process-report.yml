@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      SITE_URL: ${{ secrets.SITE_URL }}
       ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
       ISSUE_BODY: ${{ github.event.issue.body }}
@@ -43,10 +43,10 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_OUTPUT, 'acted=false\n');
             process.exit(0);
           }
-          const apiBase = process.env.API_BASE_URL;
+          const apiBase = process.env.SITE_URL;
           const adminKey = process.env.ADMIN_KEY;
           if (!apiBase || !adminKey) {
-            console.error('API_BASE_URL or ADMIN_KEY secret not configured.');
+            console.error('SITE_URL or ADMIN_KEY secret not configured.');
             process.exit(1);
           }
           (async () => {
