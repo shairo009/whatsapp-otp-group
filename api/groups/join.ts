@@ -5,16 +5,17 @@ import { fetchGroupPreview, nameContainsOTP } from "../_lib/whatsapp";
 /**
  * Real-time link check fired when a user taps "Join group" on the site.
  *
- * If the WhatsApp invite link has been reset/revoked/invalidated, the group
- * is marked as removed in the database immediately (no grace period) so it
- * disappears from the public listing for the next visitor.
- *
- * Response shape:
- *   { ok: true,  link }                       -> safe to open
- *   { ok: false, removed: true,  reason }     -> link is dead, group removed
- *   { ok: false, removed: false, reason }     -> transient (rate-limit / 5xx),
- *                                                 frontend should still let
- *                                                 user try opening the link
+ * - HARD broken (explicit revoke text, no metadata)  -> remove + block.
+ * - SOFT broken (generic preview, no member count)   -> mark broken_since
+ *                                                       but still let user
+ *                                                       try the link. The
+ *                                                       cron will remove it
+ *                                                       only if it stays
+ *                                                       soft-broken past the
+ *                                                       grace window.
+ * - Rate-limited / 5xx                               -> let user try.
+ * - OK + not OTP (when name is known)                -> remove + block.
+ * - OK                                               -> open link.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -53,9 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const preview = await fetchGroupPreview(row.link);
 
-    // Hard-broken: link reset / revoked / invalid. Remove immediately so the
-    // next user doesn't see it.
-    if (!preview.ok && !preview.rateLimited) {
+    // HARD broken: explicit invalid markers / no metadata at all. Remove.
+    const isHardBroken =
+      !preview.ok && !preview.softBroken && !preview.rateLimited;
+    if (isHardBroken) {
       await client.query(
         `UPDATE groups
            SET status = 'removed',
@@ -71,8 +73,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Transient failure (rate-limited / WhatsApp 5xx). Don't punish the group;
-    // let the user try the link.
+    // SOFT broken: generic preview with no member count. WhatsApp does this
+    // for some valid links during transient issues, so DON'T remove on the
+    // first hit — just mark broken_since (cron will grace + remove later).
+    // Still let the user try opening the link; if it really is dead, WhatsApp
+    // will tell them. If it's alive, they join successfully.
+    if (!preview.ok && preview.softBroken) {
+      await client.query(
+        `UPDATE groups
+           SET broken_since = COALESCE(broken_since, NOW()),
+               last_checked_at = NOW()
+         WHERE id = $1`,
+        [row.id]
+      );
+      return res.json({
+        ok: true,
+        link: row.link,
+        warning: preview.reason || "Could not fully verify the group right now",
+      });
+    }
+
+    // Transient (rate-limited / 5xx). Let the user try.
     if (!preview.ok && preview.rateLimited) {
       return res.json({
         ok: true,
