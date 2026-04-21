@@ -1,0 +1,74 @@
+name: Process group report
+
+# Triggered when an issue is edited. If the issue is a group-report and the
+# "Confirm: remove" checkbox is now ticked, call the site's admin API to
+# remove the group, then comment + close the issue.
+on:
+  issues:
+    types: [edited]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  remove-if-confirmed:
+    if: contains(join(github.event.issue.labels.*.name, ','), 'group-report')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Remove group if checkbox ticked
+        id: act
+        run: |
+          set -e
+          node <<'EOF'
+          const fs = require('fs');
+          const body = process.env.ISSUE_BODY || '';
+          const checkedRe = /-\s*\[(?:x|X)\]\s*Confirm:\s*remove\s*group\s*#(\d+)/m;
+          const m = body.match(checkedRe);
+          if (!m) {
+            console.log('Checkbox not ticked yet; nothing to do.');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'acted=false\n');
+            process.exit(0);
+          }
+          const groupId = Number(m[1]);
+          if (!Number.isFinite(groupId) || groupId <= 0) {
+            console.log('Could not parse group ID.');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'acted=false\n');
+            process.exit(0);
+          }
+          const apiBase = process.env.API_BASE_URL;
+          const adminKey = process.env.ADMIN_KEY;
+          if (!apiBase || !adminKey) {
+            console.error('API_BASE_URL or ADMIN_KEY secret not configured.');
+            process.exit(1);
+          }
+          (async () => {
+            const url = apiBase.replace(/\/$/, '') + '/api/admin/action';
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Admin-Key': adminKey,
+              },
+              body: JSON.stringify({ action: 'remove', groupId }),
+            });
+            const text = await res.text();
+            console.log('API status', res.status, text);
+            if (!res.ok) process.exit(1);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `acted=true\n`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `group_id=${groupId}\n`);
+          })().catch(err => { console.error(err); process.exit(1); });
+          EOF
+
+      - name: Comment + close issue
+        if: steps.act.outputs.acted == 'true'
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Group #${{ steps.act.outputs.group_id }} removed from the site by bot. Closing this report."
+          gh issue close "$ISSUE_NUMBER" --repo "$REPO"
