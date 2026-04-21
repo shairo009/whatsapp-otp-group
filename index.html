@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
 <title>WhatsApp OTP Group</title>
 <link rel="icon" type="image/png" href="/favicon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -153,6 +153,46 @@
 
   footer{padding:30px 0;text-align:center;color:var(--muted);font-size:13px;padding-left:16px;padding-right:16px}
   footer a{color:var(--teal-800);font-weight:600}
+
+  /* === Mobile in "Desktop Site" mode ===
+     When a phone has Desktop-Site toggle ON, the browser ignores the viewport
+     meta and forces ~980px width even though physical screen is ~360px.
+     Detect this with `pointer:coarse` (touch device) + wider min-width. */
+  @media (pointer: coarse) and (min-width: 600px) {
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body { font-size: 18px; }
+    .container { max-width: 100%; padding: 0 24px; }
+    header { padding: 56px 0 48px; }
+    header h1 { font-size: 40px; gap: 16px; }
+    header h1 .logo { width: 56px; height: 56px; border-radius: 14px; }
+    header h1 .logo svg { width: 30px; height: 30px; }
+    header p { font-size: 18px; }
+    .badge { font-size: 14px; padding: 7px 14px; }
+    .section-title { font-size: 16px; }
+    .submit-card h2 { font-size: 24px; }
+    .submit-card .hint { font-size: 16px; }
+    .auto-note { font-size: 16px; padding: 16px 18px; }
+    .form-row input, .form-row textarea, textarea { font-size: 17px; padding: 14px 16px; }
+    .meta-row { font-size: 15px; }
+    .btn { font-size: 17px; padding: 14px 22px; min-height: 52px; }
+    .results-summary { font-size: 16px; padding: 14px 18px; }
+    .results-list { font-size: 15px; max-height: 360px; }
+    .results-list .row { padding: 10px 18px; }
+    .results-list .url, .results-list .reason { font-size: 14px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+    .group-card { padding: 22px; }
+    .group-dp { width: 64px; height: 64px; font-size: 24px; }
+    .group-name { font-size: 20px; }
+    .group-desc { font-size: 16px; }
+    .group-meta { font-size: 14px; }
+    .pager .btn { font-size: 16px; padding: 12px 18px; min-height: 48px; }
+    .pager .page-info { font-size: 16px; }
+    .modal { max-width: 560px; padding: 30px; }
+    .modal h3 { font-size: 22px; }
+    .modal p, .modal label { font-size: 16px; }
+    .modal textarea { font-size: 16px; }
+    footer { font-size: 16px; padding: 36px 16px; }
+  }
 
   /* Tablet */
   @media(max-width:768px){
