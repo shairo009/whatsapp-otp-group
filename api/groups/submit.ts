@@ -36,6 +36,17 @@ async function processOne(
     return { link, status: "failed", reason: preview.reason || "Link not working" };
   }
 
+  // Only accept groups whose name mentions "OTP". If the group name is known
+  // and does not contain "otp", reject. If rate-limited (name unknown), let it
+  // through as pending — the verify cron will recheck and remove if not OTP.
+  if (preview.name && !/otp/i.test(preview.name)) {
+    return {
+      link,
+      status: "failed",
+      reason: "Only OTP groups are allowed (group name must contain 'OTP')",
+    };
+  }
+
   const client = await getPool().connect();
   try {
     const existing = await client.query(
