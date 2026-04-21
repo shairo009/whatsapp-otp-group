@@ -98,6 +98,7 @@
     <input id="adminKey" type="password" placeholder="Admin key" autocomplete="off" />
     <button class="btn btn-primary" id="loginBtn">Load</button>
     <button class="btn btn-warn" id="cronBtn" title="Manually run the 5-day verification">Run verify now</button>
+    <button class="btn btn-ghost" id="dedupeBtn" title="Find and remove duplicate groups (same name in different styles)">Cleanup duplicates</button>
   </div>
 
   <div class="tabs">
@@ -289,6 +290,24 @@ $('#cronBtn').addEventListener('click', async () => {
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
   finally{ $('#cronBtn').disabled=false; $('#cronBtn').textContent='Run verify now'; }
+});
+$('#dedupeBtn').addEventListener('click', async () => {
+  if(!key) return toast('Enter admin key first');
+  if(!confirm('Find duplicate groups (same name in different styles) and move the newer copies to Removed? The oldest copy of each group is kept. You can recover anything from the Removed tab.')) return;
+  $('#dedupeBtn').disabled = true;
+  $('#dedupeBtn').textContent = 'Scanning…';
+  try{
+    const r = await fetch('/api/admin/action', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'X-Admin-Key': key },
+      body: JSON.stringify({ action: 'dedupe-names' })
+    });
+    const data = await r.json();
+    if(!r.ok) throw new Error(data.error || 'Failed');
+    toast(`Scanned ${data.scanned} · ${data.duplicateGroups} duplicate set(s) · Removed ${data.removed}`);
+    loadAll();
+  }catch(e){ toast('Failed: '+e.message); }
+  finally{ $('#dedupeBtn').disabled=false; $('#dedupeBtn').textContent='Cleanup duplicates'; }
 });
 
 const saved = localStorage.getItem(KEY_STORAGE);
