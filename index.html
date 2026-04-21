@@ -549,23 +549,29 @@ async function handleJoin(btn){
       return;
     }
     if(data && data.removed){
+      const reason = data.reason || 'This invite link has been reset and was removed.';
       if(card){
-        card.style.transition = 'opacity .25s';
-        card.style.opacity = '0.4';
-        const note = document.createElement('div');
-        note.className = 'group-meta';
-        note.style.color = '#c0392b';
-        note.style.marginTop = '8px';
-        note.textContent = data.reason || 'This invite link has been reset and was removed.';
-        card.appendChild(note);
+        card.style.transition = 'opacity .25s, border-color .25s';
+        card.style.opacity = '0.55';
+        card.style.borderColor = '#fecaca';
+        let note = card.querySelector('.removed-note');
+        if(!note){
+          note = document.createElement('div');
+          note.className = 'removed-note';
+          note.style.cssText = 'margin-top:10px;padding:10px 12px;border-radius:10px;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:13px;font-weight:600;line-height:1.45;';
+          card.appendChild(note);
+        }
+        note.textContent = 'Removed: ' + reason;
       }
       btn.textContent = 'Removed';
-      setTimeout(() => loadGroups(currentPage), 1500);
+      alert('This group was removed.\n\nReason: ' + reason);
+      setTimeout(() => loadGroups(currentPage), 5000);
       return;
     }
     btn.disabled = false;
     btn.textContent = original;
-    alert((data && (data.reason || data.error)) || 'Could not verify the link, please try again.');
+    const failReason = (data && (data.reason || data.error)) || 'Could not verify the link, please try again.';
+    alert('Could not open this group.\n\nReason: ' + failReason);
   }catch(e){
     btn.disabled = false;
     btn.textContent = original;
