@@ -40,8 +40,14 @@
   .btn-primary:hover:not(:disabled){background:#1faa52}
   .btn-danger{background:#dc2626;color:#fff}
   .btn-danger:hover:not(:disabled){background:#b91c1c}
+  .btn-warning{background:#f59e0b;color:#fff}
+  .btn-warning:hover:not(:disabled){background:#d97706}
   .btn-ghost{background:#f3f4f6;color:#111827}
   .btn-ghost:hover:not(:disabled){background:#e5e7eb}
+  .auto-note{background:#fffbeb;border:1px solid #fde68a;color:#78350f;border-radius:10px;padding:10px 12px;font-size:12.5px;margin:0 0 12px;line-height:1.5}
+  .auto-note b{color:#92400e}
+  .auto-note ul{margin:6px 0 0;padding-left:18px}
+  .auto-note li{margin:2px 0}
   .msg{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:13px;display:none}
   .msg.show{display:block}
   .msg.success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
@@ -122,6 +128,14 @@
       We'll auto-pick only the WhatsApp links and verify each one.
       Up to <strong>40 links per submit</strong>.
     </p>
+    <div class="auto-note">
+      <b>⚠️ Auto-removal rules:</b> Groups are automatically removed if —
+      <ul>
+        <li>The group name does <b>not contain "OTP"</b></li>
+        <li>The invite link is <b>reset / revoked</b></li>
+        <li>Messages are <b>turned off</b> (admin-only) — reported by users via the yellow button</li>
+      </ul>
+    </div>
     <textarea
       id="linksInput"
       placeholder="Paste any text containing WhatsApp invite links, e.g.&#10;&#10;Join our OTP group: https://chat.whatsapp.com/AbCdEfGhIjKl&#10;Backup link https://chat.whatsapp.com/MnOpQrStUvWxYz&#10;...up to 40 links"></textarea>
@@ -346,6 +360,9 @@ async function loadGroups(page){
     groupsList.querySelectorAll('[data-join]').forEach(btn => {
       btn.addEventListener('click', () => handleJoin(btn));
     });
+    groupsList.querySelectorAll('[data-msgoff]').forEach(btn => {
+      btn.addEventListener('click', () => handleMessagesOff(btn));
+    });
 
     if(totalPages > 1){
       pager.style.display = 'flex';
@@ -384,6 +401,7 @@ function groupCardHTML(g){
       <div class="group-actions">
         <button class="btn btn-primary" data-join="${g.id}" data-link="${escapeHtml(g.link)}" type="button">Join group</button>
         <button class="btn btn-danger" data-report="${g.id}" data-name="${escapeHtml(name)}" type="button">Not Working</button>
+        <button class="btn btn-warning" data-msgoff="${g.id}" data-name="${escapeHtml(name)}" type="button">Messages Off</button>
       </div>
     </div>`;
 }
@@ -426,6 +444,34 @@ async function handleJoin(btn){
     btn.disabled = false;
     btn.textContent = original;
     alert((data && (data.reason || data.error)) || 'Could not verify the link, please try again.');
+  }catch(e){
+    btn.disabled = false;
+    btn.textContent = original;
+    alert('Network error: ' + e.message);
+  }
+}
+
+async function handleMessagesOff(btn){
+  const id = btn.dataset.msgoff;
+  const original = btn.textContent;
+  if(!confirm('Report this group as "Messages Off"? Admin will review and remove it if confirmed.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try{
+    const r = await fetch('/api/groups/report', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ groupId: Number(id), reason: 'Messages off', details: 'Reported via Messages Off button' })
+    });
+    if(r.ok){
+      btn.textContent = 'Sent for review ✓';
+      setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 3000);
+    } else {
+      const data = await r.json().catch(()=>({}));
+      btn.disabled = false;
+      btn.textContent = original;
+      alert(data.error || 'Could not send report. Please try again.');
+    }
   }catch(e){
     btn.disabled = false;
     btn.textContent = original;
