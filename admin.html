@@ -195,11 +195,14 @@ function groupRow(g, actions){
     if(a==='remove')  return `<button class="btn btn-warn"   data-action="remove"  data-id="${g.id}">Remove</button>`;
     if(a==='delete')  return `<button class="btn btn-danger" data-action="delete"  data-id="${g.id}">Delete</button>`;
   }).join('');
+  const removedInfo = (g.status === 'removed' && (g.removedReason || g.removedAt)) ? `
+        <div class="reason">⚠ ${escapeHtml(g.removedReason || 'Removed')}${g.removedAt?` <span class="small" style="color:#9ca3af;font-weight:400">· ${new Date(g.removedAt).toLocaleString()}</span>`:''}</div>` : '';
   return `
     <div class="row">
       ${dpHTML({...g,name})}
       <div class="meta">
         <div class="name">${escapeHtml(name)} <span class="pill ${g.status}">${g.status}</span>${reportPill}</div>
+        ${removedInfo}
         ${g.description?`<div class="desc">${escapeHtml(g.description)}</div>`:''}
         <div class="small"><a href="${escapeHtml(g.link)}" target="_blank">${escapeHtml(g.link)}</a></div>
         <div class="small">Last verified: ${lastChecked} · Submitted: ${new Date(g.createdAt).toLocaleString()}</div>
@@ -241,8 +244,15 @@ function reportRow(r){
 
 async function doAction(action, id){
   if((action==='delete') && !confirm('Delete this group permanently?')) return;
+  let reason;
+  if(action==='remove'){
+    reason = prompt('Reason for removing this group? (shown in the Removed tab)', 'Removed by admin');
+    if(reason === null) return; // cancelled
+  }
   try{
-    await api('/api/admin/action',{method:'POST',body:JSON.stringify({action,groupId:Number(id)})});
+    const body = { action, groupId: Number(id) };
+    if(reason !== undefined) body.reason = reason || 'Removed by admin';
+    await api('/api/admin/action',{method:'POST',body:JSON.stringify(body)});
     toast('Done');
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
@@ -254,8 +264,9 @@ async function doReportAction(action, id, gid){
     } else if(action==='clear-all'){
       await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'clear-reports',groupId:Number(gid)})});
     } else if(action==='remove-group'){
-      if(!confirm('Remove this group from public listing?')) return;
-      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'remove',groupId:Number(gid)})});
+      const reason = prompt('Reason for removing this reported group?', 'Removed after user report');
+      if(reason === null) return;
+      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'remove',groupId:Number(gid),reason: reason || 'Removed after user report'})});
     }
     toast('Done');
     loadAll();
