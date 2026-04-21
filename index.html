@@ -19,7 +19,8 @@
   header p{margin:6px 0 0;opacity:.9;font-size:14px}
   .badge{display:inline-block;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-top:10px}
   main{padding:28px 0 60px}
-  .section-title{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#075e54;margin:0 0 12px}
+  .section-title{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#075e54;margin:0 0 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .section-title .pill{font-size:11px;background:#075e54;color:#fff;padding:2px 8px;border-radius:999px;letter-spacing:.04em}
   .card{background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:18px}
   .submit-card{margin-bottom:24px}
   .submit-card h2{margin:0 0 4px;font-size:18px;font-weight:700}
@@ -27,8 +28,12 @@
   .form-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
   .form-row input,.form-row textarea{flex:1;min-width:220px;padding:11px 13px;border:1.5px solid #e5e7eb;border-radius:10px;font:inherit;font-size:14px;background:#fff;transition:border-color .15s}
   .form-row input:focus,.form-row textarea:focus{outline:none;border-color:#128c7e}
-  textarea{resize:vertical;min-height:60px}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;border:none;font:inherit;font-weight:600;font-size:14px;cursor:pointer;transition:transform .08s,opacity .15s}
+  textarea{resize:vertical;min-height:120px;font-family:'Inter',system-ui,sans-serif}
+  textarea#linksInput{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.5}
+  .meta-row{display:flex;justify-content:space-between;align-items:center;margin:6px 2px 12px;font-size:12px;color:#6b7280;gap:8px;flex-wrap:wrap}
+  .meta-row strong{color:#075e54;font-weight:700}
+  .meta-row .warn{color:#b45309}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;border:none;font:inherit;font-weight:600;font-size:14px;cursor:pointer;transition:transform .08s,opacity .15s,background .15s}
   .btn:active{transform:scale(.97)}
   .btn:disabled{opacity:.55;cursor:not-allowed}
   .btn-primary{background:#25d366;color:#fff}
@@ -36,17 +41,29 @@
   .btn-danger{background:#dc2626;color:#fff}
   .btn-danger:hover:not(:disabled){background:#b91c1c}
   .btn-ghost{background:#f3f4f6;color:#111827}
-  .btn-ghost:hover{background:#e5e7eb}
-  .preview{display:none;align-items:center;gap:12px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:10px}
-  .preview.show{display:flex}
-  .preview.error{background:#fef2f2;border-color:#fecaca}
-  .preview img{width:48px;height:48px;border-radius:50%;object-fit:cover;background:#e5e7eb;flex-shrink:0}
-  .preview .ptext{font-size:14px;font-weight:600;flex:1;min-width:0}
-  .preview .ptext small{display:block;color:#6b7280;font-weight:400;font-size:12px;margin-top:2px}
+  .btn-ghost:hover:not(:disabled){background:#e5e7eb}
   .msg{margin-top:10px;padding:10px 12px;border-radius:10px;font-size:13px;display:none}
   .msg.show{display:block}
   .msg.success{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
   .msg.error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+  .msg.info{background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe}
+
+  .results{margin-top:12px;display:none;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+  .results.show{display:block}
+  .results-summary{background:#f9fafb;padding:10px 12px;font-size:13px;display:flex;gap:14px;flex-wrap:wrap;border-bottom:1px solid #e5e7eb}
+  .results-summary span b{color:#111827}
+  .results-summary .ok{color:#166534}
+  .results-summary .dup{color:#92400e}
+  .results-summary .err{color:#991b1b}
+  .results-list{max-height:240px;overflow:auto;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .results-list .row{display:flex;gap:8px;padding:6px 12px;border-bottom:1px solid #f3f4f6;align-items:center}
+  .results-list .row:last-child{border-bottom:none}
+  .results-list .tag{font-size:10px;padding:2px 7px;border-radius:999px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex-shrink:0}
+  .results-list .tag.added{background:#dcfce7;color:#166534}
+  .results-list .tag.duplicate{background:#fef3c7;color:#92400e}
+  .results-list .tag.failed{background:#fee2e2;color:#991b1b}
+  .results-list .url{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#374151}
+  .results-list .reason{color:#6b7280;font-size:11px;flex-shrink:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
   .group-card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s}
@@ -61,6 +78,10 @@
   .empty{text-align:center;padding:40px 20px;color:#6b7280;background:#fff;border-radius:14px}
   .loading{text-align:center;padding:30px;color:#6b7280}
 
+  .pager{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:22px;flex-wrap:wrap}
+  .pager .page-info{font-size:13px;color:#6b7280;padding:0 6px}
+  .pager .btn{padding:9px 14px;font-size:13px}
+
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
   .modal-bg.show{display:flex}
   .modal{background:#fff;border-radius:14px;width:100%;max-width:420px;padding:22px}
@@ -68,7 +89,7 @@
   .modal p{margin:0 0 14px;color:#6b7280;font-size:13px}
   .modal label{display:block;margin-bottom:8px;font-size:13px}
   .modal label input[type=radio]{margin-right:8px}
-  .modal textarea{width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:inherit;font-size:13px;margin-top:6px}
+  .modal textarea{width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:10px;font:inherit;font-size:13px;margin-top:6px;min-height:60px}
   .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 
   footer{padding:30px 0;text-align:center;color:#6b7280;font-size:13px}
@@ -95,28 +116,37 @@
 <main class="container">
 
   <div class="card submit-card">
-    <h2>Submit your WhatsApp group</h2>
-    <p class="hint">Paste the invite link below. We'll auto-fetch the group name &amp; image, and verify the link is working.</p>
-    <div class="form-row">
-      <input id="linkInput" type="url" placeholder="https://chat.whatsapp.com/xxxxxxxxxx" autocomplete="off" />
-      <button class="btn btn-ghost" id="previewBtn" type="button">Preview</button>
-    </div>
-    <div class="preview" id="previewBox">
-      <img id="previewImg" alt="" />
-      <div class="ptext">
-        <span id="previewName">—</span>
-        <small id="previewStatus"></small>
-      </div>
-    </div>
-    <div class="form-row">
-      <textarea id="descInput" placeholder="Short description (optional)" maxlength="240"></textarea>
+    <h2>Submit WhatsApp groups</h2>
+    <p class="hint">
+      Paste one or many invite links — even mixed with text or descriptions.
+      We'll auto-pick only the WhatsApp links and verify each one.
+      Up to <strong>40 links per submit</strong>.
+    </p>
+    <textarea
+      id="linksInput"
+      placeholder="Paste any text containing WhatsApp invite links, e.g.&#10;&#10;Join our OTP group: https://chat.whatsapp.com/AbCdEfGhIjKl&#10;Backup link https://chat.whatsapp.com/MnOpQrStUvWxYz&#10;...up to 40 links"></textarea>
+    <div class="meta-row">
+      <span><strong id="detectedCount">0</strong> link<span id="detectedPlural">s</span> detected <span id="capWarn" class="warn" style="display:none">(only first 40 will be processed)</span></span>
+      <span id="dupNote"></span>
     </div>
     <button class="btn btn-primary" id="submitBtn" type="button">Submit for review</button>
     <div class="msg" id="submitMsg"></div>
+    <div class="results" id="resultsBox">
+      <div class="results-summary" id="resultsSummary"></div>
+      <div class="results-list" id="resultsList"></div>
+    </div>
   </div>
 
-  <h2 class="section-title">Active groups</h2>
+  <h2 class="section-title">
+    Active groups
+    <span class="pill" id="totalPill" style="display:none"></span>
+  </h2>
   <div id="groupsList" class="loading">Loading…</div>
+  <div class="pager" id="pager" style="display:none">
+    <button class="btn btn-ghost" id="prevBtn" type="button">← Prev</button>
+    <span class="page-info" id="pageInfo">Page 1</span>
+    <button class="btn btn-ghost" id="nextBtn" type="button">Next →</button>
+  </div>
 
 </main>
 
@@ -146,26 +176,38 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
-const linkInput = $('#linkInput');
-const previewBtn = $('#previewBtn');
-const previewBox = $('#previewBox');
-const previewImg = $('#previewImg');
-const previewName = $('#previewName');
-const previewStatus = $('#previewStatus');
+const PER_PAGE = 40;
+const MAX_SUBMIT = 40;
+const LINK_RE = /https?:\/\/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})/gi;
+
+const linksInput = $('#linksInput');
+const detectedCount = $('#detectedCount');
+const detectedPlural = $('#detectedPlural');
+const capWarn = $('#capWarn');
+const dupNote = $('#dupNote');
 const submitBtn = $('#submitBtn');
 const submitMsg = $('#submitMsg');
+const resultsBox = $('#resultsBox');
+const resultsSummary = $('#resultsSummary');
+const resultsList = $('#resultsList');
 const groupsList = $('#groupsList');
 const liveCount = $('#liveCount');
+const totalPill = $('#totalPill');
+const pager = $('#pager');
+const prevBtn = $('#prevBtn');
+const nextBtn = $('#nextBtn');
+const pageInfo = $('#pageInfo');
 
-let currentPreview = null;
-let previewTimer = null;
 let activeReportGroup = null;
+let currentPage = 1;
+let totalPages = 1;
 
-function showMsg(el, kind, text){
-  el.className = 'msg show ' + kind;
-  el.textContent = text;
-}
+function showMsg(el, kind, text){ el.className = 'msg show ' + kind; el.textContent = text; }
 function hideMsg(el){ el.className = 'msg'; el.textContent=''; }
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 function initials(name){
   if(!name) return 'G';
@@ -173,73 +215,89 @@ function initials(name){
   return w.map(s=>s[0]).join('').toUpperCase();
 }
 
-async function fetchPreview(link){
-  hideMsg(submitMsg);
-  previewBox.classList.remove('show','error');
-  if(!link || !/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/.test(link)){
-    return;
+function extractLinks(text){
+  if(!text) return [];
+  const seen = new Set();
+  const out = [];
+  LINK_RE.lastIndex = 0;
+  let m;
+  while ((m = LINK_RE.exec(text)) !== null){
+    const url = 'https://chat.whatsapp.com/' + m[1];
+    if(!seen.has(url)){ seen.add(url); out.push(url); }
   }
-  previewBox.classList.add('show');
-  previewImg.removeAttribute('src');
-  previewName.textContent = 'Checking link…';
-  previewStatus.textContent = '';
-  try{
-    const r = await fetch('/api/groups/preview?link=' + encodeURIComponent(link));
-    const data = await r.json();
-    if(!data.ok){
-      previewBox.classList.add('error');
-      previewName.textContent = 'Link not working';
-      previewStatus.textContent = data.reason || data.error || 'Reset or invalid';
-      currentPreview = null;
-      return;
-    }
-    currentPreview = data;
-    previewName.textContent = data.name || 'WhatsApp Group';
-    previewStatus.textContent = 'Link verified ✓';
-    if(data.imageUrl){
-      previewImg.src = data.imageUrl;
-      previewImg.style.display='block';
-    } else {
-      previewImg.style.display='none';
-    }
-  }catch(e){
-    previewBox.classList.add('error');
-    previewName.textContent = 'Could not verify';
-    previewStatus.textContent = e.message;
-  }
+  return out;
 }
 
-linkInput.addEventListener('input', () => {
-  clearTimeout(previewTimer);
-  const v = linkInput.value.trim();
-  previewTimer = setTimeout(() => fetchPreview(v), 500);
-});
-previewBtn.addEventListener('click', () => fetchPreview(linkInput.value.trim()));
+function updateDetected(){
+  const all = extractLinks(linksInput.value);
+  const n = all.length;
+  detectedCount.textContent = n;
+  detectedPlural.style.display = n === 1 ? 'none' : 'inline';
+  capWarn.style.display = n > MAX_SUBMIT ? 'inline' : 'none';
+  // Detect raw count vs deduped
+  const rawMatches = (linksInput.value.match(/https?:\/\/chat\.whatsapp\.com\/(?:invite\/)?[A-Za-z0-9]{10,}/gi) || []).length;
+  const dups = rawMatches - n;
+  dupNote.textContent = dups > 0 ? (dups + ' duplicate' + (dups===1?'':'s') + ' will be skipped') : '';
+}
+
+linksInput.addEventListener('input', updateDetected);
+updateDetected();
 
 submitBtn.addEventListener('click', async () => {
-  const link = linkInput.value.trim();
-  const description = $('#descInput').value.trim();
-  if(!/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+/.test(link)){
-    showMsg(submitMsg, 'error', 'Please paste a valid WhatsApp group link.');
+  const text = linksInput.value;
+  const detected = extractLinks(text);
+  if(detected.length === 0){
+    showMsg(submitMsg, 'error', 'No valid WhatsApp invite links found in the text.');
+    resultsBox.classList.remove('show');
     return;
   }
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Submitting…';
+  submitBtn.textContent = 'Submitting ' + Math.min(detected.length, MAX_SUBMIT) + '…';
   hideMsg(submitMsg);
+  resultsBox.classList.remove('show');
+
   try{
     const r = await fetch('/api/groups/submit', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ link, description })
+      body: JSON.stringify({ text })
     });
     const data = await r.json();
-    if(!r.ok){
+    if(!r.ok && !data.summary){
       showMsg(submitMsg, 'error', data.error || 'Submission failed');
-    } else {
-      showMsg(submitMsg, 'success', 'Submitted! Your group will appear after admin review.');
-      linkInput.value = '';
-      $('#descInput').value = '';
-      previewBox.classList.remove('show');
+      return;
+    }
+    const s = data.summary || {};
+    const parts = [];
+    if(s.added) parts.push(s.added + ' added');
+    if(s.duplicates) parts.push(s.duplicates + ' duplicate' + (s.duplicates===1?'':'s'));
+    if(s.failed) parts.push(s.failed + ' failed');
+    showMsg(submitMsg, s.added ? 'success' : 'info',
+      'Processed ' + s.processed + ' / ' + s.received + ' link' + (s.received===1?'':'s') +
+      (parts.length ? ': ' + parts.join(', ') : '') +
+      (s.truncated ? ' (extra links above 40 were ignored)' : '') +
+      (s.added ? '. Pending admin review.' : '.'));
+
+    // Show detailed results
+    resultsSummary.innerHTML =
+      '<span class="ok">Added: <b>'+(s.added||0)+'</b></span>' +
+      '<span class="dup">Duplicates: <b>'+(s.duplicates||0)+'</b></span>' +
+      '<span class="err">Failed: <b>'+(s.failed||0)+'</b></span>' +
+      '<span>Total received: <b>'+(s.received||0)+'</b></span>';
+    resultsList.innerHTML = (data.results || []).map(it =>
+      '<div class="row">' +
+        '<span class="tag '+it.status+'">'+it.status+'</span>' +
+        '<span class="url">'+escapeHtml(it.link)+'</span>' +
+        (it.reason ? '<span class="reason">'+escapeHtml(it.reason)+'</span>' : '') +
+      '</div>'
+    ).join('');
+    resultsBox.classList.add('show');
+
+    if(s.added){
+      linksInput.value = '';
+      updateDetected();
+      // Refresh groups list - jump to page 1 to show new entries area (they're pending though)
+      loadGroups(1);
     }
   }catch(e){
     showMsg(submitMsg, 'error', e.message);
@@ -249,31 +307,53 @@ submitBtn.addEventListener('click', async () => {
   }
 });
 
-async function loadGroups(){
+async function loadGroups(page){
+  if(typeof page === 'number') currentPage = page;
+  groupsList.className = 'loading';
+  groupsList.innerHTML = 'Loading…';
+  pager.style.display = 'none';
   try{
-    const r = await fetch('/api/groups');
+    const r = await fetch('/api/groups?page=' + currentPage + '&limit=' + PER_PAGE);
     const data = await r.json();
-    if(!Array.isArray(data) || data.length === 0){
+    const items = (data && data.items) || [];
+    const total = (data && data.total) || 0;
+    totalPages = (data && data.totalPages) || 1;
+    if(currentPage > totalPages) { currentPage = totalPages; }
+
+    liveCount.textContent = total + ' active group' + (total===1?'':'s');
+    totalPill.textContent = total + ' total';
+    totalPill.style.display = total ? 'inline-block' : 'none';
+
+    if(items.length === 0){
       groupsList.className = '';
       groupsList.innerHTML = '<div class="empty">No active groups yet. Be the first to submit one above!</div>';
-      liveCount.textContent = '0 active groups';
       return;
     }
-    liveCount.textContent = data.length + ' active group' + (data.length===1?'':'s');
+
     groupsList.className = 'grid';
-    groupsList.innerHTML = data.map(g => groupCardHTML(g)).join('');
+    groupsList.innerHTML = items.map(g => groupCardHTML(g)).join('');
     groupsList.querySelectorAll('[data-report]').forEach(btn => {
       btn.addEventListener('click', () => openReport(btn.dataset.report, btn.dataset.name));
     });
+
+    if(totalPages > 1){
+      pager.style.display = 'flex';
+      pageInfo.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+    }
   }catch(e){
     groupsList.className = '';
-    groupsList.innerHTML = '<div class="empty">Failed to load groups: '+e.message+'</div>';
+    groupsList.innerHTML = '<div class="empty">Failed to load groups: '+escapeHtml(e.message)+'</div>';
   }
 }
 
-function escapeHtml(s){
-  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+prevBtn.addEventListener('click', () => {
+  if(currentPage > 1){ loadGroups(currentPage - 1); window.scrollTo({top: groupsList.offsetTop - 80, behavior: 'smooth'}); }
+});
+nextBtn.addEventListener('click', () => {
+  if(currentPage < totalPages){ loadGroups(currentPage + 1); window.scrollTo({top: groupsList.offsetTop - 80, behavior: 'smooth'}); }
+});
 
 function groupCardHTML(g){
   const name = g.name || 'WhatsApp Group';
@@ -336,7 +416,7 @@ $('#reportSend').addEventListener('click', async () => {
   }
 });
 
-loadGroups();
+loadGroups(1);
 </script>
 </body>
 </html>

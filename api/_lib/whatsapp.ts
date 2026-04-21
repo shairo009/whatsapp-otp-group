@@ -13,6 +13,8 @@ const INVALID_MARKERS = [
   "reset by an admin",
 ];
 
+const LINK_RE = /https?:\/\/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})/gi;
+
 function decodeHtml(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -41,6 +43,28 @@ function metaContent(html: string, prop: string): string | null {
 
 export function isValidWhatsAppLink(link: string): boolean {
   return /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{10,}$/.test(link.trim());
+}
+
+/**
+ * Extract all unique, normalized WhatsApp invite links from arbitrary text.
+ * Ignores everything that isn't a valid WhatsApp invite URL — so users can
+ * paste messages, captions, mixed content, etc.
+ */
+export function extractWhatsAppLinks(text: string): string[] {
+  if (!text || typeof text !== "string") return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  LINK_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = LINK_RE.exec(text)) !== null) {
+    const code = m[1];
+    const normalized = `https://chat.whatsapp.com/${code}`;
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      out.push(normalized);
+    }
+  }
+  return out;
 }
 
 export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
