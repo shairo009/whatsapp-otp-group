@@ -335,6 +335,9 @@ async function loadGroups(page){
     groupsList.querySelectorAll('[data-report]').forEach(btn => {
       btn.addEventListener('click', () => openReport(btn.dataset.report, btn.dataset.name));
     });
+    groupsList.querySelectorAll('[data-join]').forEach(btn => {
+      btn.addEventListener('click', () => handleJoin(btn));
+    });
 
     if(totalPages > 1){
       pager.style.display = 'flex';
@@ -371,10 +374,55 @@ function groupCardHTML(g){
       </div>
       ${g.description ? `<p class="group-desc">${escapeHtml(g.description)}</p>` : '<div style="flex:1"></div>'}
       <div class="group-actions">
-        <a class="btn btn-primary" href="${escapeHtml(g.link)}" target="_blank" rel="noopener">Join group</a>
+        <button class="btn btn-primary" data-join="${g.id}" data-link="${escapeHtml(g.link)}" type="button">Join group</button>
         <button class="btn btn-danger" data-report="${g.id}" data-name="${escapeHtml(name)}" type="button">Report — Admin only / Issue</button>
       </div>
     </div>`;
+}
+
+async function handleJoin(btn){
+  const id = btn.dataset.join;
+  const link = btn.dataset.link;
+  const card = btn.closest('.group-card');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Checking link…';
+  try{
+    const r = await fetch('/api/groups/join', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ groupId: Number(id) })
+    });
+    const data = await r.json().catch(() => ({}));
+    if(data && data.ok){
+      window.open(data.link || link, '_blank', 'noopener');
+      btn.textContent = 'Opened';
+      setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 1200);
+      return;
+    }
+    if(data && data.removed){
+      if(card){
+        card.style.transition = 'opacity .25s';
+        card.style.opacity = '0.4';
+        const note = document.createElement('div');
+        note.className = 'group-meta';
+        note.style.color = '#c0392b';
+        note.style.marginTop = '8px';
+        note.textContent = data.reason || 'This invite link has been reset and was removed.';
+        card.appendChild(note);
+      }
+      btn.textContent = 'Removed';
+      setTimeout(() => loadGroups(currentPage), 1500);
+      return;
+    }
+    btn.disabled = false;
+    btn.textContent = original;
+    alert((data && (data.reason || data.error)) || 'Could not verify the link, please try again.');
+  }catch(e){
+    btn.disabled = false;
+    btn.textContent = original;
+    alert('Network error: ' + e.message);
+  }
 }
 
 function openReport(id, name){
