@@ -65,25 +65,46 @@ function decodeHtml(s: string): string {
     .replace(/&nbsp;/g, " ");
 }
 
-// Cyrillic / Greek homoglyphs that look identical to Latin letters. Users
-// love these for "OTP" group names because they bypass naive substring
-// matching: e.g. "ОТР" (Cyrillic O, T, R/P-lookalike) renders the same as
-// "OTP" in WhatsApp.
+// Cyrillic / Greek / Armenian / Coptic / Cherokee homoglyphs that look
+// identical (or near-identical) to Latin letters. Users love these for
+// "OTP" group names because they bypass naive substring matching: e.g.
+// "ОТР" (Cyrillic O, T, R-lookalike) renders the same as "OTP" in WhatsApp.
 const HOMOGLYPHS: Record<string, string> = {
-  // Cyrillic uppercase
-  "\u0410": "A", "\u0412": "B", "\u0415": "E", "\u041A": "K", "\u041C": "M",
-  "\u041D": "H", "\u041E": "O", "\u0420": "P", "\u0421": "C", "\u0422": "T",
-  "\u0425": "X", "\u0406": "I", "\u0408": "J", "\u0405": "S", "\u04AE": "Y",
-  // Cyrillic lowercase
-  "\u0430": "a", "\u0435": "e", "\u043A": "k", "\u043E": "o", "\u0440": "p",
-  "\u0441": "c", "\u0445": "x", "\u0443": "y", "\u0456": "i", "\u0458": "j",
-  "\u0455": "s",
-  // Greek uppercase
-  "\u0391": "A", "\u0392": "B", "\u0395": "E", "\u0396": "Z", "\u0397": "H",
-  "\u0399": "I", "\u039A": "K", "\u039C": "M", "\u039D": "N", "\u039F": "O",
-  "\u03A1": "P", "\u03A4": "T", "\u03A5": "Y", "\u03A7": "X",
-  // Greek lowercase
-  "\u03BF": "o", "\u03C1": "p", "\u03C4": "t",
+  // === Cyrillic uppercase ===
+  "\u0410":"A","\u0412":"B","\u0415":"E","\u041A":"K","\u041C":"M",
+  "\u041D":"H","\u041E":"O","\u0420":"P","\u0421":"C","\u0422":"T",
+  "\u0425":"X","\u0406":"I","\u0408":"J","\u0405":"S","\u04AE":"Y",
+  "\u0470":"P","\u0474":"V","\u051A":"Q","\u051C":"W","\u050C":"G",
+  "\u04C0":"I","\u04CF":"i","\u048A":"I","\u04AC":"T","\u04A0":"K",
+  // === Cyrillic lowercase ===
+  "\u0430":"a","\u0435":"e","\u043A":"k","\u043E":"o","\u0440":"p",
+  "\u0441":"c","\u0445":"x","\u0443":"y","\u0456":"i","\u0458":"j",
+  "\u0455":"s","\u04CE":"m","\u04BB":"h","\u04AF":"y","\u051B":"q",
+  "\u051D":"w","\u050D":"g","\u04BD":"h","\u0501":"d","\u057C":"n",
+  "\u0461":"w","\u0463":"b","\u0475":"v","\u04A3":"n",
+  // === Greek uppercase ===
+  "\u0391":"A","\u0392":"B","\u0395":"E","\u0396":"Z","\u0397":"H",
+  "\u0399":"I","\u039A":"K","\u039C":"M","\u039D":"N","\u039F":"O",
+  "\u03A1":"P","\u03A4":"T","\u03A5":"Y","\u03A7":"X","\u03A6":"O",
+  "\u03BF":"o","\u03C1":"p","\u03C4":"t","\u03B9":"i","\u03BD":"v",
+  "\u03BA":"k","\u03B1":"a","\u03B5":"e","\u03BC":"u","\u03C7":"x",
+  "\u03C5":"u","\u03C9":"w","\u03B7":"n","\u03B2":"B","\u03B6":"z",
+  // === Armenian look-alikes ===
+  "\u0548":"O","\u054C":"P","\u054F":"S","\u0555":"O","\u0540":"H",
+  "\u0533":"S","\u0541":"Q","\u057D":"u","\u0578":"n","\u056C":"l",
+  // === Coptic (uppercase) — many duplicate Greek but distinct codepoints ===
+  "\u2C95":"O","\u2C9F":"P","\u2CA3":"T","\u2C8E":"H","\u2C82":"B",
+  // === Cherokee letters that mimic Latin ===
+  "\u13AA":"L","\u13A0":"D","\u13A1":"R","\u13A6":"W","\u13A9":"Z",
+  "\u13AB":"C","\u13B3":"S","\u13C0":"G","\u13C2":"M","\u13C3":"H",
+  "\u13DE":"L","\u13F4":"B","\u13EF":"P","\u13E2":"T",
+  // === Letter-like math operators ===
+  "\u2126":"O", // ohm (Ω)
+  "\u00B5":"u", // micro sign
+  // === Digit homoglyphs ===
+  "\u04E0":"3","\u0417":"3","\u0437":"3", // Cyrillic 3-lookalikes
+  "\u0431":"6", // Cyrillic б often used as 6
+  "\u0421\u041E":"CO", // (kept for clarity; pair handled by single-char loop too)
 };
 
 // Map a single fancy/styled unicode character to its plain ASCII equivalent
@@ -139,17 +160,43 @@ function mapFancyChar(cp: number): string | null {
   if (cp >= 0xff10 && cp <= 0xff19) return String.fromCharCode("0".charCodeAt(0) + (cp - 0xff10));
   // Parenthesized Latin small: ⒜..⒵ (U+249C..U+24B5)
   if (cp >= 0x249c && cp <= 0x24b5) return String.fromCharCode("a".charCodeAt(0) + (cp - 0x249c));
-  // Regional indicators: 🇦..🇿 (U+1F1E6..U+1F1FF) → A..Z
+  // Regional indicators: 🇦..🇿 (U+1F1E6..U+1F1FF) → A..Z (flag-emoji letters)
   if (cp >= 0x1f1e6 && cp <= 0x1f1ff) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f1e6));
-  // Squared Latin Letters: 🄰..🅉 (U+1F130..U+1F149) → A..Z
-  if (cp >= 0x1f130 && cp <= 0x1f149) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f130));
-  // Negative Squared Latin Letters: 🅰..🆉 (U+1F170..U+1F189) → A..Z
-  if (cp >= 0x1f170 && cp <= 0x1f189) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f170));
-  // Negative Circled Latin Letters: 🅐..🅩 (U+1F150..U+1F169) → A..Z
-  if (cp >= 0x1f150 && cp <= 0x1f169) return String.fromCharCode("A".charCodeAt(0) + (cp - 0x1f150));
-  // Circled Latin small: ⓐ already handled in 24D0; also small from U+24D0..U+24E9 done above
   // Tag characters: U+E0020..U+E007E → printable ASCII
   if (cp >= 0xe0020 && cp <= 0xe007e) return String.fromCharCode(cp - 0xe0000);
+  // Subscript / superscript digits: ₀..₉ (U+2080..U+2089), ⁰..⁹ (most via NFKD,
+  // but include explicitly for safety): U+2070, U+00B9, U+00B2, U+00B3, U+2074..U+2079
+  if (cp >= 0x2080 && cp <= 0x2089) return String.fromCharCode("0".charCodeAt(0) + (cp - 0x2080));
+  if (cp === 0x2070) return "0"; if (cp === 0x00B9) return "1";
+  if (cp === 0x00B2) return "2"; if (cp === 0x00B3) return "3";
+  if (cp >= 0x2074 && cp <= 0x2079) return String.fromCharCode("4".charCodeAt(0) + (cp - 0x2074));
+  // Latin Letter Small Capitals (U+1D00..U+1D25) — IPA / phonetic chars that
+  // look like ALL-CAPS letters but are lowercase codepoints. Irregular table.
+  const SMALL_CAPS: Record<number, string> = {
+    0x1D00:"A", 0x1D03:"B", 0x1D04:"C", 0x1D05:"D", 0x1D07:"E",
+    0x1D0A:"J", 0x1D0B:"K", 0x1D0C:"L", 0x1D0D:"M", 0x1D0E:"N",
+    0x1D0F:"O", 0x1D18:"P", 0x1D1B:"T", 0x1D1C:"U", 0x1D20:"V",
+    0x1D21:"W", 0x1D22:"Z",
+    0xA730:"F", 0xA7AE:"I", 0xA7AF:"Q", 0xA7B2:"J",
+  };
+  if (SMALL_CAPS[cp]) return SMALL_CAPS[cp];
+  // Modifier Letter Capital / Superscript Latin caps (U+1D2C..U+1D42)
+  const MOD_CAPS: Record<number, string> = {
+    0x1D2C:"A", 0x1D2E:"B", 0x1D30:"D", 0x1D31:"E", 0x1D33:"G",
+    0x1D34:"H", 0x1D35:"I", 0x1D36:"J", 0x1D37:"K", 0x1D38:"L",
+    0x1D39:"M", 0x1D3A:"N", 0x1D3C:"O", 0x1D3E:"P", 0x1D3F:"R",
+    0x1D40:"T", 0x1D41:"U", 0x1D42:"W",
+  };
+  if (MOD_CAPS[cp]) return MOD_CAPS[cp];
+  // Modifier Letter Small (superscript lowercase) — U+1D43..U+1D61, irregular
+  const MOD_SMALL: Record<number, string> = {
+    0x1D43:"a", 0x1D47:"b", 0x1D9C:"c", 0x1D48:"d", 0x1D49:"e",
+    0x1DA0:"f", 0x1D4D:"g", 0x02B0:"h", 0x2071:"i", 0x02B2:"j",
+    0x1D4F:"k", 0x02E1:"l", 0x1D50:"m", 0x207F:"n", 0x1D52:"o",
+    0x1D56:"p", 0x02B3:"r", 0x02E2:"s", 0x1D57:"t", 0x1D58:"u",
+    0x1D5B:"v", 0x02B7:"w", 0x02E3:"x", 0x02B8:"y", 0x1DBB:"z",
+  };
+  if (MOD_SMALL[cp]) return MOD_SMALL[cp];
   // Cyrillic / Greek homoglyphs
   const ch = String.fromCodePoint(cp);
   if (HOMOGLYPHS[ch]) return HOMOGLYPHS[ch];
