@@ -20,15 +20,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const client = await getPool().connect();
   try {
+    // Dedupe by group name (case-insensitive). Same WhatsApp group can have
+    // multiple invite codes if admin reset the link — show only one row per
+    // distinct name. Rows with NULL name are kept individually.
+    const dedupedCte = `
+      WITH ranked AS (
+        SELECT id, link, description, name, image_url, status, created_at,
+               ROW_NUMBER() OVER (
+                 PARTITION BY CASE WHEN name IS NULL THEN id::text ELSE LOWER(TRIM(name)) END
+                 ORDER BY created_at ASC, id ASC
+               ) AS rn
+        FROM groups
+        WHERE status IN ('approved','pending')
+      )
+      SELECT id, link, description, name, image_url, status, created_at
+      FROM ranked WHERE rn = 1
+    `;
+
     const totalRes = await client.query(
-      "SELECT COUNT(*)::int AS c FROM groups WHERE status IN ('approved','pending')"
+      `SELECT COUNT(*)::int AS c FROM (${dedupedCte}) t`
     );
     const total = totalRes.rows[0].c as number;
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     const result = await client.query(
-      `SELECT id, link, description, name, image_url, status, created_at
-       FROM groups WHERE status IN ('approved','pending')
+      `${dedupedCte}
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
