@@ -12,9 +12,14 @@ const MAX_LINKS = 500;
 const MAX_ADDS = 40;
 const CONCURRENCY = 2;
 
+// 80% of approved/pending slots are reserved for OTP groups.
+// Up to 20% may be non-OTP groups. Groups that exceed this cap are sent
+// to the review queue instead of being added directly.
+const OTHER_NAME_MAX_RATIO = 0.20;
+
 type ResultItem = {
   link: string;
-  status: "added" | "duplicate" | "failed";
+  status: "added" | "duplicate" | "failed" | "review";
   reason?: string;
   id?: number;
   name?: string | null;
@@ -40,20 +45,23 @@ async function processOne(
     return { link, status: "failed", reason: preview.reason || "Link not working" };
   }
 
-  // Strict OTP-only policy:
-  // - If WhatsApp gave us a name, it MUST contain "otp".
-  // - If we couldn't read a name (null) AND we weren't rate-limited, reject —
-  //   we can't verify, so we don't let unknown groups in.
-  // - If rate-limited, allow as pending; the verify cron will enforce OTP later.
-  if (!preview.rateLimited) {
-    if (!preview.name || !nameContainsOTP(preview.name)) {
-      return {
-        link,
-        status: "failed",
-        reason: "Only OTP groups are allowed (group name must contain 'OTP')",
-      };
-    }
+  // Determine whether this is an OTP group or an "other name" group.
+  // Rules:
+  //   - If rate-limited, allow as pending; the verify cron will enforce ratio later.
+  //   - If name is known and contains OTP, add as pending (normal flow).
+  //   - If name is known and does NOT contain OTP, apply the 20% cap rule:
+  //       * Within cap  → add as pending
+  //       * Over cap    → send to review queue
+  //   - If name is null and not rate-limited, we can't verify; reject.
+  if (!preview.rateLimited && !preview.name) {
+    return {
+      link,
+      status: "failed",
+      reason: "Could not read the group name. Please make sure the link is valid and try again.",
+    };
   }
+
+  const isOtp = preview.rateLimited || nameContainsOTP(preview.name ?? "");
 
   const client = await getPool().connect();
   try {
@@ -71,17 +79,13 @@ async function processOne(
     }
 
     // Same group with a different invite link? Reject if a non-removed entry
-    // already exists with a name that normalizes to the same key. We do the
-    // comparison in JS (not SQL) so that fancy unicode, strikethrough,
-    // homoglyphs, zero-width chars, emoji separators etc. all collapse to
-    // the same canonical form — e.g. "O̶ T̶ P̶ Group", "𝐎𝐓𝐏 group" and
-    // "OTP-Group" are all treated as the same group.
+    // already exists with a name that normalizes to the same key.
     if (preview.name) {
       const candidateKey = normalizeName(preview.name);
       if (candidateKey) {
         const all = await client.query(
           `SELECT id, status, name FROM groups
-           WHERE status IN ('approved','pending')`
+           WHERE status IN ('approved','pending','review')`
         );
         const match = all.rows.find(
           (r: { id: number; status: string; name: string | null }) =>
@@ -106,6 +110,43 @@ async function processOne(
       };
     }
 
+    // For non-OTP groups, enforce the 20% other-name cap.
+    // Count how many non-OTP groups exist in active (approved/pending) slots.
+    if (!isOtp && preview.name) {
+      const ratioResult = await client.query(
+        `SELECT
+           COUNT(*) AS total,
+           COUNT(*) FILTER (WHERE name IS NOT NULL AND name NOT ILIKE '%otp%') AS other_count
+         FROM groups WHERE status IN ('approved', 'pending')`
+      );
+      const total = parseInt(ratioResult.rows[0].total || "0", 10);
+      const otherCount = parseInt(ratioResult.rows[0].other_count || "0", 10);
+      const newTotal = total + 1;
+      const allowedOther = Math.floor(newTotal * OTHER_NAME_MAX_RATIO);
+
+      if (otherCount >= allowedOther) {
+        // Over the 20% cap — send to review instead of rejecting outright.
+        const result = await client.query(
+          `INSERT INTO groups (link, description, name, image_url, status, last_checked_at)
+           VALUES ($1, $2, $3, $4, 'review', NOW())
+           RETURNING id, name, image_url`,
+          [link, description, preview.name, preview.imageUrl]
+        );
+        const r = result.rows[0];
+        return {
+          link,
+          status: "review",
+          id: r.id,
+          name: r.name ?? null,
+          imageUrl: r.image_url ?? null,
+          reason:
+            `This group has been sent to review. Our listing maintains 80% OTP groups and up to 20% other groups. ` +
+            `The other-name slots (20%) are currently full, so this group will be reviewed and approved when a slot opens.`,
+        };
+      }
+    }
+
+    // Within limits — add as pending.
     const result = await client.query(
       `INSERT INTO groups (link, description, name, image_url, status, last_checked_at)
        VALUES ($1, $2, $3, $4, 'pending', NOW())
@@ -122,6 +163,8 @@ async function processOne(
       imageUrl: r.image_url ?? null,
       reason: preview.rateLimited
         ? "Saved as pending — WhatsApp rate-limited verification, will retry automatically."
+        : !isOtp
+        ? `Added as pending. Note: This group's name does not contain 'OTP'. It counts toward the 20% other-name allowance.`
         : undefined,
     };
   } catch (err: any) {
@@ -207,14 +250,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     received: merged.length,
     processed: toProcess.length,
     added: results.filter((r) => r.status === "added").length,
+    review: results.filter((r) => r.status === "review").length,
     duplicates: results.filter((r) => r.status === "duplicate").length,
     failed: results.filter((r) => r.status === "failed").length,
     truncated,
     maxPerSubmit: MAX_LINKS,
     maxAdds: MAX_ADDS,
+    policy: "80% OTP groups / 20% other-name groups. Groups exceeding the 20% other-name cap are sent to review.",
   };
 
-  return res.status(toProcess.length === 1 && results[0].status === "failed" ? 400 : 200).json({
+  const allFailed = toProcess.length === 1 && results[0].status === "failed";
+  return res.status(allFailed ? 400 : 200).json({
     summary,
     results,
   });
