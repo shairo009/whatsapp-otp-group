@@ -253,13 +253,19 @@ async function syncPendingGroups() {
           ]);
 
           let imageUrl = info.pictureUrl || null;
-          if (info.id) {
+          console.log(`[sync] Info for ${row.id}: Name="${info.subject}", hasPic=${!!imageUrl}`);
+
+          // If pictureUrl is not in info, try getProfilePicUrl as backup
+          if (!imageUrl && info.id) {
             try {
-              imageUrl = await Promise.race([
+              const backupUrl = await Promise.race([
                 client.getProfilePicUrl(info.id._serialized || info.id),
                 new Promise((_, rej) => setTimeout(() => rej(new Error("dp timeout")), 5000)),
               ]);
-            } catch (e) {}
+              if (backupUrl) imageUrl = backupUrl;
+            } catch (e) {
+              console.log(`[sync] Backup DP fetch failed for ${row.id}`);
+            }
           }
 
           await clientDb.query(`
