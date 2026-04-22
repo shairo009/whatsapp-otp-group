@@ -518,6 +518,49 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// ---------------------------------------------------------------------------
+// FALLBACK: Microlink (https://microlink.io)
+// WhatsApp frequently serves a generic / empty preview to datacenter IPs
+// (Vercel / AWS / etc.), so direct fetches from our serverless function lose
+// the group name and DP. Microlink renders the page with a real headless
+// browser from a residential-style IP and returns the og:* metadata. The
+// public free tier allows ~50 req/day per IP, which is enough for the
+// fallback path (only the groups that direct-fetch failed on hit it).
+// ---------------------------------------------------------------------------
+async function fetchViaMicrolink(link: string): Promise<{
+  name: string | null;
+  imageUrl: string | null;
+} | null> {
+  try {
+    const url = `https://api.microlink.io/?url=${encodeURIComponent(link)}&meta=true&audio=false&video=false&iframe=false`;
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 12000);
+    const r = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": pickUA() },
+      signal: ctl.signal,
+    });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const data: any = await r.json().catch(() => null);
+    if (!data || data.status !== "success" || !data.data) return null;
+    const d = data.data;
+    const rawTitle: string | null = d.title || d.publisher || null;
+    const cleanedTitle = cleanCandidateName(rawTitle);
+    let img: string | null = null;
+    if (d.image && typeof d.image === "object") img = d.image.url || null;
+    else if (typeof d.image === "string") img = d.image;
+    if (!img && d.logo && typeof d.logo === "object") img = d.logo.url || null;
+    // Microlink's "logo" for whatsapp.com is the WhatsApp brand mark — useless
+    // as a group DP. Reject anything from whatsapp.com's static asset hosts.
+    if (img && /static\.whatsapp\.net\/.+\/wa_logo/i.test(img)) img = null;
+    if (img && /web\.whatsapp\.com\/favicon/i.test(img)) img = null;
+    if (!cleanedTitle && !img) return null;
+    return { name: cleanedTitle, imageUrl: img };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchOnce(link: string): Promise<{
   status: number;
   html: string | null;
@@ -543,6 +586,37 @@ async function fetchOnce(link: string): Promise<{
 }
 
 export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
+  const direct = await fetchGroupPreviewDirect(link);
+
+  // Decide whether the direct result is "good enough". It's good if it gave
+  // us BOTH a real name and an image. Otherwise, try Microlink to fill the
+  // gaps — but never let a Microlink failure override a direct hard-broken
+  // verdict (revoked / reset).
+  const directHardBroken =
+    !direct.ok &&
+    !direct.softBroken &&
+    !direct.rateLimited &&
+    direct.reason === "Link reset or revoked";
+
+  const directHasNameAndImage = Boolean(direct.name && direct.imageUrl);
+  if (directHardBroken || directHasNameAndImage) return direct;
+
+  // Try Microlink fallback for soft-broken / partial / rate-limited cases.
+  const ml = await fetchViaMicrolink(link);
+  if (ml && (ml.name || ml.imageUrl)) {
+    // Microlink found something — promote to ok=true, fill any blanks from
+    // the direct fetch when possible.
+    return {
+      ok: true,
+      name: ml.name ?? direct.name ?? null,
+      imageUrl: ml.imageUrl ?? direct.imageUrl ?? null,
+      hasMembers: direct.hasMembers,
+    };
+  }
+  return direct;
+}
+
+async function fetchGroupPreviewDirect(link: string): Promise<GroupPreview> {
   if (!isValidWhatsAppLink(link)) {
     return { ok: false, name: null, imageUrl: null, reason: "Invalid link format" };
   }
