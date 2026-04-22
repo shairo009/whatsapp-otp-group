@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool, isAdmin } from "../_lib/db";
+import { nameContainsOTP } from "../_lib/whatsapp";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -37,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: r.name ?? null,
         imageUrl: r.image_url ?? null,
         status: r.status,
+        isOtp: nameContainsOTP(r.name),
         lastCheckedAt: r.last_checked_at,
         createdAt: r.created_at,
         removedReason: r.removed_reason ?? null,
