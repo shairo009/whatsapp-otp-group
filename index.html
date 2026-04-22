@@ -278,10 +278,10 @@
     .submit-card{margin-bottom:12px}
     .submit-card h2{font-size:15px;margin-bottom:4px}
     .submit-card .hint{font-size:10.5px;line-height:1.3}
-    .auto-note{font-size:9.5px;padding:4px 6px;margin:6px 0;border-radius:8px;line-height:1.2}
-    .auto-note b{font-size:10px;display:block;margin-bottom:2px}
-    .auto-note ul{margin:0;padding-left:14px;list-style-type:disc}
-    .auto-note li{margin-bottom:0;padding:0}
+    .auto-note{font-size:8px;padding:4px 6px;margin:4px 0;border-radius:6px;line-height:1.2;opacity:0.85}
+    .auto-note b{font-size:8.5px;color:var(--text)}
+    .auto-note .rules-text{display:inline}
+    .auto-note ul{display:none}
     textarea{font-size:12px;min-height:80px;padding:8px}
     .btn{padding:8px 12px;font-size:12.5px;min-height:36px}
     #submitBtn{width:100%}
@@ -375,12 +375,7 @@
       Up to <strong>40 links per submit</strong>.
     </p>
     <div class="auto-note">
-      <b>⚠️ Auto-removal rules:</b> Groups are automatically removed if —
-      <ul>
-        <li>The group name does <b>not contain "OTP"</b> — <b>not allowed</b></li>
-        <li>The invite link is <b>reset / revoked</b> — <b>not allowed</b></li>
-        <li>Messages are <b>turned off</b> — <b>not allowed</b></li>
-      </ul>
+      <b>Auto-removal:</b> <span class="rules-text">Groups must contain "OTP" in name. Reset/revoked links or "Messages Off" groups are not allowed.</span>
     </div>
     <textarea
       id="linksInput"
