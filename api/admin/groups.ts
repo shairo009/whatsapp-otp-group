@@ -16,11 +16,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let q = `SELECT g.id, g.link, g.description, g.name, g.image_url, g.status,
                     g.last_checked_at, g.created_at,
                     g.removed_reason, g.removed_at,
+                    g.broken_since,
                     COUNT(r.id)::int AS report_count
              FROM groups g
              LEFT JOIN reports r ON r.group_id = g.id`;
     const params: any[] = [];
-    if (status === "pending" || status === "approved" || status === "removed") {
+    const validStatuses = ["pending", "approved", "removed", "review"];
+    if (validStatuses.includes(status)) {
       q += " WHERE g.status = $1";
       params.push(status);
     }
@@ -39,6 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         createdAt: r.created_at,
         removedReason: r.removed_reason ?? null,
         removedAt: r.removed_at ?? null,
+        brokenSince: r.broken_since ?? null,
         reportCount: r.report_count,
       }))
     );
