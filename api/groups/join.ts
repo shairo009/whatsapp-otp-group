@@ -5,17 +5,10 @@ import { fetchGroupPreview } from "../_lib/whatsapp";
 /**
  * Real-time link check fired when a user taps "Join group" on the site.
  *
- * Policy: a real, working link must NEVER be removed by a join-click.
- * Only the hourly cron (verify.ts) is allowed to enforce the 80%/20%
- * OTP/other-name ratio or mark links as broken/removed.
- *
- * The join handler only blocks on signals that are virtually impossible
- * to come from a healthy link:
- *   - Explicit "invite revoked / reset" text in WhatsApp's own page body
- *   - Page that returned no metadata at all
- *   - Group already marked removed/rejected in our DB
- * Anything ambiguous (generic preview, rate-limit, 5xx, name change) ->
- * just open the link and let WhatsApp itself decide.
+ * Policy: NO group is ever removed by the join handler — not even broken
+ * or revoked links. All suspicious groups are sent to the review queue so
+ * an admin can decide. The hourly cron (verify.ts) also only sends to
+ * review, never removes directly.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -54,30 +47,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const preview = await fetchGroupPreview(row.link);
 
-    // HARD broken: explicit "invite revoked" text from WhatsApp itself, or
-    // a page with no metadata at all. A real link CANNOT produce these
-    // signals — they only appear on actually dead links. Safe to remove.
+    // HARD broken: explicit "invite revoked / reset" signal from WhatsApp.
+    // Send to review — an admin will verify and decide. Never auto-remove.
     const isHardBroken =
       !preview.ok && !preview.softBroken && !preview.rateLimited;
     if (isHardBroken) {
       await client.query(
         `UPDATE groups
-           SET status = 'removed',
+           SET status = 'review',
                broken_since = COALESCE(broken_since, NOW()),
+               removed_reason = $2,
                last_checked_at = NOW()
          WHERE id = $1`,
-        [row.id]
+        [
+          row.id,
+          `Sent to review on join: ${preview.reason || "invite link appears reset or revoked"}. Admin will verify.`,
+        ]
       );
       return res.json({
         ok: false,
-        removed: true,
-        reason: preview.reason || "This invite link has been reset by the admin",
+        removed: false,
+        inReview: true,
+        reason: "This group's link may have been reset. It has been sent for admin review.",
       });
     }
 
     // SOFT broken / rate-limited / 5xx — DO NOT touch the row at all.
-    // Just open the link. If it's real, the user joins. If it's dead, the
-    // hourly cron will catch it across multiple checks and remove it then.
+    // Just open the link. If it's real, the user joins.
     if (!preview.ok) {
       return res.json({
         ok: true,
@@ -87,9 +83,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Healthy preview — refresh metadata and clear broken flag.
-    // NOTE: We intentionally do NOT enforce the OTP-name rule here.
-    // The 80% OTP / 20% other-name ratio is enforced by the hourly cron
-    // (verify.ts) via the review queue, not on every join click.
     await client.query(
       `UPDATE groups
          SET name = COALESCE($2, name),
@@ -102,8 +95,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.json({ ok: true, link: row.link });
   } catch (err: any) {
-    // Network/DB errors must never kill the link. Return the link if we
-    // already loaded it; otherwise surface a soft error.
     return res.status(500).json({
       ok: false,
       removed: false,
