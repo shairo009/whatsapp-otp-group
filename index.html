@@ -897,17 +897,23 @@ loadGroups(1);
         balls.forEach((b, i) => {
             const vel = b.userData.vel;
 
-            // Mouse Attraction
-            const attractDir = mouseTarget.clone().sub(b.position);
+            // Mouse Attraction (with slight jitter to prevent clumping)
+            const target = mouseTarget.clone();
+            target.x += (Math.sin(Date.now() * 0.001 + i) * 2);
+            target.y += (Math.cos(Date.now() * 0.0012 + i) * 2);
+
+            const attractDir = target.sub(b.position);
             const dist = attractDir.length();
-            if (dist > 0.5) {
-                attractDir.normalize().multiplyScalar(0.012);
+            if (dist > 1.0) {
+                attractDir.normalize().multiplyScalar(0.008);
                 vel.add(attractDir);
             }
 
-            vel.addScaledVector(gravityVec, 0.5);
+            vel.addScaledVector(gravityVec, 0.4);
             if (vel.length() > SPEED_LIMIT) vel.multiplyScalar(0.98);
             b.position.add(vel);
+
+            // Wall collisions
             const lx = boxLimits.x - ballRadius, ly = boxLimits.y - ballRadius, lz = boxLimits.z - ballRadius;
             if (b.position.x > lx) { b.position.x = lx; vel.x *= -BOUNCE_FACTOR; }
             if (b.position.x < -lx) { b.position.x = -lx; vel.x *= -BOUNCE_FACTOR; }
@@ -915,6 +921,29 @@ loadGroups(1);
             if (b.position.y < -ly) { b.position.y = -ly; vel.y *= -BOUNCE_FACTOR; }
             if (b.position.z > lz) { b.position.z = lz; vel.z *= -BOUNCE_FACTOR; }
             if (b.position.z < -lz) { b.position.z = -lz; vel.z *= -BOUNCE_FACTOR; }
+
+            // Ball-to-ball collisions (Preventing overlapping)
+            for (let j = i + 1; j < balls.length; j++) {
+                const b2 = balls[j];
+                const dVec = b.position.clone().sub(b2.position);
+                const dist = dVec.length();
+                const minDist = ballRadius * 2.1; 
+                if (dist < minDist && dist > 0.001) {
+                    const normal = dVec.normalize();
+                    const relVel = vel.clone().sub(b2.userData.vel);
+                    const dot = relVel.dot(normal);
+                    if (dot < 0) {
+                        const imp = normal.clone().multiplyScalar(dot * BOUNCE_FACTOR);
+                        vel.sub(imp);
+                        b2.userData.vel.add(imp);
+                        // Separate them
+                        const overlap = (minDist - dist) / 2;
+                        b.position.addScaledVector(normal, overlap);
+                        b2.position.addScaledVector(normal, -overlap);
+                    }
+                }
+            }
+
             b.rotation.x += vel.y * 0.2;
             b.rotation.z -= vel.x * 0.2;
         });
