@@ -797,9 +797,9 @@ loadGroups(1);
 // ── FOOTBALL WALLPAPER LOGIC ────────────────────────────────
 (function() {
     const BALL_COUNT    = 35;
-    const GRAVITY       = 0.006;
+    const GRAVITY       = 0.003;
     const BOUNCE_FACTOR = 1.08;
-    const SPEED_LIMIT   = 0.35;
+    const SPEED_LIMIT   = 0.12;
     const ballRadius    = 0.85;
 
     const scene = new THREE.Scene();
@@ -892,7 +892,7 @@ loadGroups(1);
             const attractDir = target.sub(b.position);
             const dist = attractDir.length();
             if (dist > 1.0) {
-                attractDir.normalize().multiplyScalar(0.008);
+                attractDir.normalize().multiplyScalar(0.0035);
                 vel.add(attractDir);
             }
 
