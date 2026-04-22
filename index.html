@@ -284,16 +284,17 @@
     #submitBtn{width:100%}
     
     .grid{grid-template-columns: 1fr 1fr; gap:8px}
-    .group-card{padding:8px;border-radius:8px}
-    .group-head{gap:6px;margin-bottom:4px;flex-direction:column;align-items:flex-start}
+    .group-card{padding:8px;border-radius:8px;display:flex;flex-direction:column}
+    .group-head{gap:4px;margin-bottom:2px;flex-direction:column;align-items:flex-start}
     .group-dp{width:28px;height:28px;font-size:12px}
     .group-name{font-size:11px;line-height:1.2;height:2.4em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-    .group-meta{font-size:9.5px;margin-top:1px}
+    .group-meta{font-size:9.5px;margin-top:0px;margin-bottom:4px}
     .group-desc{display:none}
-    .group-actions .btn{padding:4px 8px;font-size:10.5px;min-height:30px;border-radius:6px}
-    .report-label{display:flex;font-size:8.5px;margin:4px 0 -2px}
-    .report-row{display:flex;flex-direction:row;gap:4px}
-    .report-row .btn{font-size:9px;padding:3px 6px}
+    .group-actions{margin-top:0}
+    .group-actions .btn{padding:4px 8px;font-size:10.5px;min-height:28px;border-radius:6px}
+    .report-label{display:flex;font-size:8.5px;margin:2px 0 -1px}
+    .report-row{display:flex;flex-direction:row;gap:4px;margin-top:2px}
+    .report-row .btn{font-size:9px;padding:3px 6px;min-height:26px}
     .pager .btn{padding:8px 12px;min-height:40px;font-size:13px}
   }
     .modal h3{font-size:16px}
