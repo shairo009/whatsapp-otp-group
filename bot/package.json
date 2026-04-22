@@ -1,0 +1,18 @@
+{
+  "name": "whatsapp-otp-group-bot",
+  "version": "1.0.0",
+  "description": "Headless WhatsApp Web client that resolves group invite-code metadata (name + DP) for the main site.",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "qrcode": "^1.5.3",
+    "whatsapp-web.js": "^1.27.0"
+  }
+}
