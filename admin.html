@@ -144,13 +144,13 @@ const $ = s => document.querySelector(s);
 const KEY_STORAGE = 'wog_admin_key';
 let key = '';
 
-function isOtpName(name){ return name && /otp/i.test(name); }
+function isOtpName(name){ return name && /otp/i.test(name); } // fallback only
 
 // Derive a human-readable reason if the DB reason is empty
 function deriveReason(g){
   if(g.removedReason) return g.removedReason;
   if(g.status === 'review'){
-    if(g.name && !isOtpName(g.name)) return `Group name "${g.name}" does not contain 'OTP'. Policy: 80% of listed groups must be OTP groups.`;
+    if(g.isOtp === false) return `Group name "${g.name}" does not contain 'OTP'. Policy: 80% of listed groups must be OTP groups.`;
     if(g.brokenSince) return `Link appears broken since ${new Date(g.brokenSince).toLocaleString()}. Sent to review for admin verification.`;
     return 'Sent to review by the automated cron check. Please verify the group link and approve or delete.';
   }
@@ -202,7 +202,7 @@ function updateRatioBar(groups){
   const approved = groups.filter(g=>g.status==='approved');
   const total = approved.length;
   if(total === 0){ $('#ratioBar').style.display='none'; return; }
-  const otpCount = approved.filter(g=>isOtpName(g.name)).length;
+  const otpCount = approved.filter(g=>g.isOtp).length;
   const otherCount = total - otpCount;
   const allowedOther = Math.floor(total * 0.20);
   const otherPct = (otherCount / total * 100).toFixed(1);
@@ -260,7 +260,7 @@ function groupRow(g, actions, isReview=false){
   if(isReview || g.status==='review'){
     const reason = deriveReason(g);
     reasonHtml = `<div class="reason-box review"><span class="reason-label">📋 Review ka karan</span>${escapeHtml(reason)}</div>`;
-  } else if(g.status==='pending' && g.name && !isOtpName(g.name)){
+  } else if(g.status==='pending' && g.isOtp === false){
     reasonHtml = `<div class="reason-box warn"><span class="reason-label">⚠ Dhyan dijiye</span>Is group ka naam "${escapeHtml(g.name)}" mein 'OTP' nahi hai. Policy: 80% groups OTP hone chahiye.</div>`;
   } else if(g.status==='removed'){
     const reason = g.removedReason || 'Admin ne remove kiya';
@@ -273,7 +273,7 @@ function groupRow(g, actions, isReview=false){
     if(a==='delete')  return `<button class="btn btn-danger" data-action="delete"  data-id="${g.id}">Delete</button>`;
   }).join('');
 
-  const rowClass = isReview ? 'row review-row' : (g.status==='pending' && g.name && !isOtpName(g.name) ? 'row warn-row' : 'row');
+  const rowClass = isReview ? 'row review-row' : (g.status==='pending' && g.isOtp === false ? 'row warn-row' : 'row');
 
   return `
     <div class="${rowClass}">
