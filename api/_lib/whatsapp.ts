@@ -519,7 +519,48 @@ function sleep(ms: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// FALLBACK: Microlink (https://microlink.io)
+// FALLBACK #1: self-hosted WhatsApp Web bot.
+// Set BOT_URL + BOT_KEY env vars on Vercel and the bot resolves the invite
+// code via the official WhatsApp Web client — the only source that still
+// has the real group name + DP. See /bot/README.md for setup.
+// ---------------------------------------------------------------------------
+async function fetchViaBot(link: string): Promise<{
+  name: string | null;
+  imageUrl: string | null;
+  revoked?: boolean;
+} | null> {
+  const botUrl = process.env.BOT_URL;
+  const botKey = process.env.BOT_KEY;
+  if (!botUrl || !botKey) return null;
+  const m = link.match(/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})/);
+  if (!m) return null;
+  const code = m[1];
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 25000);
+    const r = await fetch(`${botUrl.replace(/\/+$/, "")}/preview/${encodeURIComponent(code)}`, {
+      headers: { Authorization: `Bearer ${botKey}`, Accept: "application/json" },
+      signal: ctl.signal,
+    });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const data: any = await r.json().catch(() => null);
+    if (!data) return null;
+    if (data.ok) {
+      return {
+        name: cleanCandidateName(data.name) ?? null,
+        imageUrl: data.imageUrl || null,
+      };
+    }
+    if (data.revoked) return { name: null, imageUrl: null, revoked: true };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FALLBACK #2: Microlink (https://microlink.io)
 // WhatsApp frequently serves a generic / empty preview to datacenter IPs
 // (Vercel / AWS / etc.), so direct fetches from our serverless function lose
 // the group name and DP. Microlink renders the page with a real headless
@@ -588,10 +629,6 @@ async function fetchOnce(link: string): Promise<{
 export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
   const direct = await fetchGroupPreviewDirect(link);
 
-  // Decide whether the direct result is "good enough". It's good if it gave
-  // us BOTH a real name and an image. Otherwise, try Microlink to fill the
-  // gaps — but never let a Microlink failure override a direct hard-broken
-  // verdict (revoked / reset).
   const directHardBroken =
     !direct.ok &&
     !direct.softBroken &&
@@ -601,11 +638,29 @@ export async function fetchGroupPreview(link: string): Promise<GroupPreview> {
   const directHasNameAndImage = Boolean(direct.name && direct.imageUrl);
   if (directHardBroken || directHasNameAndImage) return direct;
 
-  // Try Microlink fallback for soft-broken / partial / rate-limited cases.
+  // Fallback #1: ask the self-hosted WhatsApp Web bot. This is the only
+  // source that still has the real group name + DP (WhatsApp removed them
+  // from the public invite preview HTML).
+  const bot = await fetchViaBot(link);
+  if (bot) {
+    if (bot.revoked) {
+      return { ok: false, name: null, imageUrl: null, reason: "Link reset or revoked" };
+    }
+    if (bot.name || bot.imageUrl) {
+      return {
+        ok: true,
+        name: bot.name ?? direct.name ?? null,
+        imageUrl: bot.imageUrl ?? direct.imageUrl ?? null,
+        hasMembers: true,
+      };
+    }
+  }
+
+  // Fallback #2: Microlink. Rarely helps for WhatsApp now (preview was
+  // stripped from the page), but kept as a last resort for environments
+  // where the bot isn't configured.
   const ml = await fetchViaMicrolink(link);
   if (ml && (ml.name || ml.imageUrl)) {
-    // Microlink found something — promote to ok=true, fill any blanks from
-    // the direct fetch when possible.
     return {
       ok: true,
       name: ml.name ?? direct.name ?? null,
