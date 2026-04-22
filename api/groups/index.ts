@@ -20,12 +20,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const client = await getPool().connect();
   try {
+    // Make sure last_synced_at exists even if /api/cron/sync hasn't been
+    // hit yet — keeps SELECT below safe on a fresh DB.
+    await client.query(
+      "ALTER TABLE groups ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP"
+    );
+
     // Dedupe by group name (case-insensitive). Same WhatsApp group can have
     // multiple invite codes if admin reset the link — show only one row per
     // distinct name. Rows with NULL name are kept individually.
     const dedupedCte = `
       WITH ranked AS (
         SELECT id, link, description, name, image_url, status, created_at,
+               last_checked_at, last_synced_at,
                ROW_NUMBER() OVER (
                  PARTITION BY CASE WHEN name IS NULL THEN id::text ELSE LOWER(TRIM(name)) END
                  ORDER BY created_at ASC, id ASC
@@ -33,7 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM groups
         WHERE status IN ('approved','pending')
       )
-      SELECT id, link, description, name, image_url, status, created_at
+      SELECT id, link, description, name, image_url, status, created_at,
+             last_checked_at, last_synced_at
       FROM ranked WHERE rn = 1
     `;
 
@@ -50,15 +58,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       [limit, offset]
     );
 
-    const items = result.rows.map((r) => ({
-      id: r.id,
-      link: r.link,
-      description: r.description ?? null,
-      name: r.name ?? null,
-      imageUrl: r.image_url ?? null,
-      status: r.status,
-      createdAt: r.created_at,
-    }));
+    const items = result.rows.map((r) => {
+      // Pick the most recent freshness signal we have.
+      const synced = r.last_synced_at ? new Date(r.last_synced_at).getTime() : 0;
+      const checked = r.last_checked_at ? new Date(r.last_checked_at).getTime() : 0;
+      const freshest = Math.max(synced, checked);
+      return {
+        id: r.id,
+        link: r.link,
+        description: r.description ?? null,
+        name: r.name ?? null,
+        imageUrl: r.image_url ?? null,
+        status: r.status,
+        createdAt: r.created_at,
+        lastSyncedAt: freshest > 0 ? new Date(freshest).toISOString() : null,
+      };
+    });
 
     return res.json({
       items,

@@ -9,9 +9,11 @@
     { "source": "/api/admin/reports", "destination": "/api/admin/reports" },
     { "source": "/api/admin/action", "destination": "/api/admin/action" },
     { "source": "/api/cron/verify", "destination": "/api/cron/verify" },
+    { "source": "/api/cron/sync", "destination": "/api/cron/sync" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/cron/verify", "schedule": "0 3 * * *" }
+    { "path": "/api/cron/verify", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/sync", "schedule": "0 6 * * *" }
   ]
 }
