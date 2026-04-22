@@ -452,7 +452,7 @@ function decodeHtmlEntities(s){
     .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&nbsp;/g,' ');
 }
 
-const PLACEHOLDER_EMOJIS = ['🌹', '❤️', '🔥', '✨', '👑', '💎', '🍀', '🌸', '🍭', '🎀', '🦄', '🌈', '🦋', '🎈', '⭐'];
+const PLACEHOLDER_EMOJIS = ['🌹', '❤️', '😊', '😍', '🥰', '🌸', '🌷', '💖', '💐', '🤩'];
 function getPlaceholder(id) {
   return PLACEHOLDER_EMOJIS[id % PLACEHOLDER_EMOJIS.length];
 }
