@@ -26,6 +26,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   :root{
     --teal-900:#064e3b;
@@ -34,9 +35,9 @@
     --teal-500:#14b8a6;
     --green-500:#22c55e;
     --green-600:#16a34a;
-    --bg:#f6faf8;
-    --surface:#ffffff;
-    --border:#e6efe9;
+    --bg:transparent;
+    --surface:rgba(255,255,255,0.85);
+    --border:rgba(230,239,233,0.5);
     --text:#0f172a;
     --muted:#64748b;
     --warn-bg:#fef9c3;
@@ -58,12 +59,15 @@
     -webkit-font-smoothing:antialiased;
     -moz-osx-font-smoothing:grayscale;
     text-rendering:optimizeLegibility;
-    background:
-      radial-gradient(900px 500px at 80% -10%, rgba(34,197,94,.15), transparent 70%),
-      radial-gradient(700px 400px at -10% 10%, rgba(20,184,166,.12), transparent 70%),
-      linear-gradient(135deg,#f8fafc 0%,#f1f5f9 45%,#e2e8f0 100%);
+    background: transparent;
     background-attachment:fixed;
     min-height:100vh;
+  }
+  #canvas-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: -1;
   }
   a{color:inherit;text-decoration:none}
   .container{max-width:1100px;margin:0 auto;padding:0 16px}
@@ -82,8 +86,8 @@
   .section-title{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--teal-800);margin:8px 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .section-title .pill{font-size:11px;background:var(--teal-800);color:#fff;padding:3px 9px;border-radius:999px;letter-spacing:.04em}
 
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:20px}
-  .submit-card{margin-bottom:26px;background:linear-gradient(180deg,#ffffff 0%,#fbfefc 100%)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:20px;backdrop-filter:blur(8px)}
+  .submit-card{margin-bottom:26px;background:linear-gradient(180deg,rgba(255,255,255,0.9) 0%,rgba(251,254,252,0.8) 100%)}
   .submit-card h2{margin:0 0 4px;font-size:19px;font-weight:700;letter-spacing:-.2px}
   .submit-card .hint{margin:0 0 14px;font-size:13px;color:var(--muted)}
   .form-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
@@ -329,6 +333,8 @@
 </style>
 </head>
 <body>
+
+<div id="canvas-container"></div>
 
 <header>
   <div class="container">
@@ -800,6 +806,127 @@ $('#reportSend').addEventListener('click', async () => {
 });
 
 loadGroups(1);
+
+// ── FOOTBALL WALLPAPER LOGIC ────────────────────────────────
+(function() {
+    const BALL_COUNT    = 15;
+    const GRAVITY       = 0.006;
+    const BOUNCE_FACTOR = 1.02;
+    const SPEED_LIMIT   = 0.25;
+    const ballRadius    = 0.85;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f4f2);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 24);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    dirLight.position.set(5, 20, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const boxLimits = { x: 1, y: 1, z: 5 };
+    let boxMesh;
+    function setupBox() {
+        if (boxMesh) scene.remove(boxMesh);
+        const vFOV = THREE.MathUtils.degToRad(camera.fov);
+        const height = 2 * Math.tan(vFOV / 2) * camera.position.z;
+        const width = height * camera.aspect;
+        boxLimits.x = width / 2;
+        boxLimits.y = height / 2;
+        boxLimits.z = 8;
+        const geo = new THREE.BoxGeometry(width * 1.1, height * 1.1, boxLimits.z * 2);
+        const mat = new THREE.MeshStandardMaterial({ color: 0xf0f4f2, side: THREE.BackSide });
+        boxMesh = new THREE.Mesh(geo, mat);
+        boxMesh.receiveShadow = true;
+        scene.add(boxMesh);
+    }
+
+    function createFootballTexture() {
+        const c = document.createElement('canvas');
+        c.width = c.height = 512;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 512, 512);
+        ctx.fillStyle = '#111111';
+        const patches = [[256, 256, 60],[140, 140, 45], [372, 140, 45],[90, 300, 45], [422, 300, 45],[200, 420, 45], [312, 420, 45],[256, 60, 40], [60, 200, 38],[452, 200, 38], [150, 470, 35],[362, 470, 35]];
+        patches.forEach(([x, y, r]) => {
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 2 * Math.PI / 5) - Math.PI / 2;
+                const px = x + r * Math.cos(angle);
+                const py = y + r * Math.sin(angle);
+                i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+        });
+        return new THREE.CanvasTexture(c);
+    }
+
+    const ballTex = createFootballTexture();
+    const ballGeo = new THREE.SphereGeometry(ballRadius, 24, 24);
+    const balls = [];
+    setupBox();
+
+    for (let i = 0; i < BALL_COUNT; i++) {
+        const mat = new THREE.MeshStandardMaterial({ map: ballTex, roughness: 0.4 });
+        const b = new THREE.Mesh(ballGeo, mat);
+        b.castShadow = b.receiveShadow = true;
+        b.position.set((Math.random()-0.5)*boxLimits.x*1.5, (Math.random()-0.5)*boxLimits.y*1.5, (Math.random()-0.5)*5);
+        const speed = 0.05 + Math.random() * 0.08;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        b.userData.vel = new THREE.Vector3(speed*Math.sin(phi)*Math.cos(theta), speed*Math.sin(phi)*Math.sin(theta), speed*Math.cos(phi)*0.3);
+        scene.add(b);
+        balls.push(b);
+    }
+
+    const gravityVec = new THREE.Vector3(0, -GRAVITY, 0);
+    function updatePhysics() {
+        balls.forEach((b, i) => {
+            const vel = b.userData.vel;
+            vel.addScaledVector(gravityVec, 1);
+            if (vel.length() > SPEED_LIMIT) vel.multiplyScalar(0.98);
+            b.position.add(vel);
+            const lx = boxLimits.x - ballRadius, ly = boxLimits.y - ballRadius, lz = boxLimits.z - ballRadius;
+            if (b.position.x > lx) { b.position.x = lx; vel.x *= -BOUNCE_FACTOR; }
+            if (b.position.x < -lx) { b.position.x = -lx; vel.x *= -BOUNCE_FACTOR; }
+            if (b.position.y > ly) { b.position.y = ly; vel.y *= -BOUNCE_FACTOR; }
+            if (b.position.y < -ly) { b.position.y = -ly; vel.y *= -BOUNCE_FACTOR; }
+            if (b.position.z > lz) { b.position.z = lz; vel.z *= -BOUNCE_FACTOR; }
+            if (b.position.z < -lz) { b.position.z = -lz; vel.z *= -BOUNCE_FACTOR; }
+            b.rotation.x += vel.y * 0.2;
+            b.rotation.z -= vel.x * 0.2;
+        });
+    }
+
+    window.addEventListener('mousemove', (e) => {
+        gravityVec.x = ((e.clientX / window.innerWidth) - 0.5) * 0.03;
+        gravityVec.y = -GRAVITY + ((e.clientY / window.innerHeight) - 0.5) * -0.02;
+    });
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        setupBox();
+    });
+
+    function animate() {
+        requestAnimationFrame(animate);
+        updatePhysics();
+        renderer.render(scene, camera);
+    }
+    animate();
+})();
 </script>
 </body>
 </html>
