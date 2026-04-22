@@ -891,10 +891,21 @@ loadGroups(1);
     }
 
     const gravityVec = new THREE.Vector3(0, -GRAVITY, 0);
+    const mouseTarget = new THREE.Vector3(0, 0, 0);
+
     function updatePhysics() {
         balls.forEach((b, i) => {
             const vel = b.userData.vel;
-            vel.addScaledVector(gravityVec, 1);
+
+            // Mouse Attraction
+            const attractDir = mouseTarget.clone().sub(b.position);
+            const dist = attractDir.length();
+            if (dist > 0.5) {
+                attractDir.normalize().multiplyScalar(0.012);
+                vel.add(attractDir);
+            }
+
+            vel.addScaledVector(gravityVec, 0.5);
             if (vel.length() > SPEED_LIMIT) vel.multiplyScalar(0.98);
             b.position.add(vel);
             const lx = boxLimits.x - ballRadius, ly = boxLimits.y - ballRadius, lz = boxLimits.z - ballRadius;
@@ -910,9 +921,25 @@ loadGroups(1);
     }
 
     window.addEventListener('mousemove', (e) => {
-        gravityVec.x = ((e.clientX / window.innerWidth) - 0.5) * 0.03;
-        gravityVec.y = -GRAVITY + ((e.clientY / window.innerHeight) - 0.5) * -0.02;
+        const x = (e.clientX / window.innerWidth) * 2 - 1;
+        const y = -(e.clientY / window.innerHeight) * 2 + 1;
+        const vFOV = THREE.MathUtils.degToRad(camera.fov);
+        const hAtZ = 2 * Math.tan(vFOV / 2) * camera.position.z;
+        const wAtZ = hAtZ * camera.aspect;
+        mouseTarget.set(x * wAtZ / 2, y * hAtZ / 2, 0);
+
+        gravityVec.x = x * 0.02;
+        gravityVec.y = -GRAVITY + y * -0.01;
     });
+    window.addEventListener('touchmove', (e) => {
+        const touch = e.touches[0];
+        const x = (touch.clientX / window.innerWidth) * 2 - 1;
+        const y = -(touch.clientY / window.innerHeight) * 2 + 1;
+        const vFOV = THREE.MathUtils.degToRad(camera.fov);
+        const hAtZ = 2 * Math.tan(vFOV / 2) * camera.position.z;
+        const wAtZ = hAtZ * camera.aspect;
+        mouseTarget.set(x * wAtZ / 2, y * hAtZ / 2, 0);
+    }, { passive: true });
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
