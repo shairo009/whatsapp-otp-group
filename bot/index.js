@@ -21,6 +21,8 @@ const QRCode = require("qrcode");
 const path = require("path");
 const fs = require("fs");
 const { Client, LocalAuth } = require("whatsapp-web.js");
+const { Pool } = require("pg");
+require("dotenv").config();
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BOT_KEY = process.env.BOT_KEY || "";
@@ -214,3 +216,74 @@ app.get("/", (_req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[bot] HTTP listening on :${PORT}`);
 });
+
+// --- DATABASE SYNC LOGIC ---
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+async function syncPendingGroups() {
+  if (!ready) return;
+  console.log("[sync] Checking for groups needing metadata...");
+  try {
+    const clientDb = await pool.connect();
+    try {
+      // Find groups that:
+      // 1. Have no name or no image URL
+      // 2. Are in 'pending' or 'approved' status
+      // 3. Haven't been checked in the last hour (to avoid spamming if fetch fails)
+      const res = await clientDb.query(`
+        SELECT id, link FROM groups 
+        WHERE (name IS NULL OR image_url IS NULL)
+        AND status IN ('approved', 'pending')
+        AND (last_checked_at IS NULL OR last_checked_at < NOW() - INTERVAL '1 hour')
+        LIMIT 5
+      `);
+
+      for (const row of res.rows) {
+        const code = row.link.split("/").pop();
+        console.log(`[sync] Resolving ${code} (ID: ${row.id})...`);
+        
+        try {
+          const info = await Promise.race([
+            client.getInviteInfo(code),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
+          ]);
+
+          let imageUrl = info.pictureUrl || null;
+          if (info.id) {
+            try {
+              imageUrl = await Promise.race([
+                client.getProfilePicUrl(info.id._serialized || info.id),
+                new Promise((_, rej) => setTimeout(() => rej(new Error("dp timeout")), 5000)),
+              ]);
+            } catch (e) {}
+          }
+
+          await clientDb.query(`
+            UPDATE groups 
+            SET name = $1, image_url = $2, last_checked_at = NOW()
+            WHERE id = $3
+          `, [info.subject || null, imageUrl || null, row.id]);
+          
+          console.log(`[sync] Updated ${row.id}: ${info.subject}`);
+        } catch (err) {
+          console.error(`[sync] Failed to resolve ${code}:`, err.message);
+          // Mark as checked anyway so we don't retry immediately
+          await clientDb.query("UPDATE groups SET last_checked_at = NOW() WHERE id = $1", [row.id]);
+        }
+      }
+    } finally {
+      clientDb.release();
+    }
+  } catch (err) {
+    console.error("[sync] DB Error:", err.message);
+  }
+}
+
+// Run every 2 minutes
+setInterval(syncPendingGroups, 2 * 60 * 1000);
+// Also run shortly after start (give WhatsApp time to connect)
+setTimeout(syncPendingGroups, 30000);
