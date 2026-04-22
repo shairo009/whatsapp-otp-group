@@ -12,10 +12,15 @@ const MAX_LINKS = 500;
 const MAX_ADDS = 40;
 const CONCURRENCY = 2;
 
-// 80% of approved/pending slots are reserved for OTP groups.
-// Up to 20% may be non-OTP groups. Groups that exceed this cap are sent
-// to the review queue instead of being added directly.
-const OTHER_NAME_MAX_RATIO = 0.20;
+// Website ratio rule: 80% OTP groups, 20% other-name groups (max).
+// This ratio is calculated dynamically based on total approved groups.
+// Example:
+//   Total approved = 10  → max other = 2  (20% of 10)
+//   Total approved = 50  → max other = 10 (20% of 50)
+//   Total approved = 100 → max other = 20 (20% of 100)
+//   Total approved = 200 → max other = 40 (20% of 200)
+const OTHER_NAME_MAX_RATIO = 0.20; // 20%
+const OTP_MIN_RATIO = 0.80;        // 80%
 
 type ResultItem = {
   link: string;
@@ -25,7 +30,35 @@ type ResultItem = {
   name?: string | null;
   imageUrl?: string | null;
   existingStatus?: string;
+  ratioInfo?: {
+    totalApproved: number;
+    otpApproved: number;
+    otherApproved: number;
+    allowedOther: number;
+    availableSlots: number;
+    currentOtherPercent: string;
+  };
 };
+
+// Calculate the current ratio stats from DB.
+async function getRatioStats(client: any) {
+  const res = await client.query(
+    `SELECT
+       COUNT(*) AS total,
+       COUNT(*) FILTER (WHERE name IS NOT NULL AND name ILIKE '%otp%') AS otp_count,
+       COUNT(*) FILTER (WHERE name IS NULL OR name NOT ILIKE '%otp%') AS other_count
+     FROM groups WHERE status = 'approved'`
+  );
+  const total = parseInt(res.rows[0].total || "0", 10);
+  const otpCount = parseInt(res.rows[0].otp_count || "0", 10);
+  const otherCount = parseInt(res.rows[0].other_count || "0", 10);
+  const allowedOther = Math.floor(total * OTHER_NAME_MAX_RATIO);
+  const availableSlots = Math.max(0, allowedOther - otherCount);
+  const currentOtherPercent =
+    total > 0 ? ((otherCount / total) * 100).toFixed(1) + "%" : "0%";
+
+  return { total, otpCount, otherCount, allowedOther, availableSlots, currentOtherPercent };
+}
 
 async function processOne(
   link: string,
@@ -38,21 +71,10 @@ async function processOne(
 
   const preview = await fetchGroupPreview(link);
 
-  // Hard fail only when the link is definitively bad. If WhatsApp rate-limited
-  // us (429) or returned a transient server error, accept the link as pending
-  // — the verify cron will revalidate it later.
   if (!preview.ok && !preview.rateLimited) {
     return { link, status: "failed", reason: preview.reason || "Link not working" };
   }
 
-  // Determine whether this is an OTP group or an "other name" group.
-  // Rules:
-  //   - If rate-limited, allow as pending; the verify cron will enforce ratio later.
-  //   - If name is known and contains OTP, add as pending (normal flow).
-  //   - If name is known and does NOT contain OTP, apply the 20% cap rule:
-  //       * Within cap  → add as pending
-  //       * Over cap    → send to review queue
-  //   - If name is null and not rate-limited, we can't verify; reject.
   if (!preview.rateLimited && !preview.name) {
     return {
       link,
@@ -65,6 +87,7 @@ async function processOne(
 
   const client = await getPool().connect();
   try {
+    // Check duplicate by link
     const existing = await client.query(
       "SELECT id, status FROM groups WHERE link = $1",
       [link]
@@ -78,8 +101,7 @@ async function processOne(
       };
     }
 
-    // Same group with a different invite link? Reject if a non-removed entry
-    // already exists with a name that normalizes to the same key.
+    // Check duplicate by group name (same group, different invite link)
     if (preview.name) {
       const candidateKey = normalizeName(preview.name);
       if (candidateKey) {
@@ -106,26 +128,28 @@ async function processOne(
       return {
         link,
         status: "failed",
-        reason: `Add limit reached — only ${MAX_ADDS} groups can be added per submit. This link is valid but was not added.`,
+        reason: `Add limit reached — only ${MAX_ADDS} groups can be added per submit.`,
       };
     }
 
-    // For non-OTP groups, enforce the 20% other-name cap.
-    // Count how many non-OTP groups exist in active (approved/pending) slots.
-    if (!isOtp && preview.name) {
-      const ratioResult = await client.query(
-        `SELECT
-           COUNT(*) AS total,
-           COUNT(*) FILTER (WHERE name IS NOT NULL AND name NOT ILIKE '%otp%') AS other_count
-         FROM groups WHERE status IN ('approved', 'pending')`
-      );
-      const total = parseInt(ratioResult.rows[0].total || "0", 10);
-      const otherCount = parseInt(ratioResult.rows[0].other_count || "0", 10);
-      const newTotal = total + 1;
-      const allowedOther = Math.floor(newTotal * OTHER_NAME_MAX_RATIO);
+    // --- 80%/20% RATIO CALCULATION ---
+    // Count currently approved groups to calculate how many other-name slots exist.
+    // Formula: allowed_other = floor(total_approved * 20%)
+    // If current other-name approved groups have filled the 20% slot → review queue.
+    const stats = await getRatioStats(client);
 
-      if (otherCount >= allowedOther) {
-        // Over the 20% cap — send to review instead of rejecting outright.
+    if (!isOtp && preview.name) {
+      const ratioInfo = {
+        totalApproved: stats.total,
+        otpApproved: stats.otpCount,
+        otherApproved: stats.otherCount,
+        allowedOther: stats.allowedOther,
+        availableSlots: stats.availableSlots,
+        currentOtherPercent: stats.currentOtherPercent,
+      };
+
+      if (stats.availableSlots <= 0) {
+        // 20% cap is full — send to review.
         const result = await client.query(
           `INSERT INTO groups (link, description, name, image_url, status, last_checked_at)
            VALUES ($1, $2, $3, $4, 'review', NOW())
@@ -139,14 +163,40 @@ async function processOne(
           id: r.id,
           name: r.name ?? null,
           imageUrl: r.image_url ?? null,
+          ratioInfo,
           reason:
-            `This group has been sent to review. Our listing maintains 80% OTP groups and up to 20% other groups. ` +
-            `The other-name slots (20%) are currently full, so this group will be reviewed and approved when a slot opens.`,
+            `Sent to review — the 20% other-name slots are currently full. ` +
+            `Currently ${stats.otherCount}/${stats.total} groups (${stats.currentOtherPercent}) are other-name. ` +
+            `Allowed: ${stats.allowedOther} (20% of ${stats.total} approved groups). ` +
+            `Your group will be reviewed and approved when a slot opens.`,
         };
       }
+
+      // Within 20% cap — add as pending with slot info.
+      const result = await client.query(
+        `INSERT INTO groups (link, description, name, image_url, status, last_checked_at)
+         VALUES ($1, $2, $3, $4, 'pending', NOW())
+         RETURNING id, name, image_url`,
+        [link, description, preview.name, preview.imageUrl]
+      );
+      counter.added++;
+      const r = result.rows[0];
+      return {
+        link,
+        status: "added",
+        id: r.id,
+        name: r.name ?? null,
+        imageUrl: r.image_url ?? null,
+        ratioInfo,
+        reason:
+          `Added as pending (other-name group). ` +
+          `Other-name slots: ${stats.otherCount + 1}/${stats.allowedOther} used ` +
+          `(${stats.availableSlots - 1} slot${stats.availableSlots - 1 === 1 ? "" : "s"} remaining). ` +
+          `Policy: max 20% of approved groups may be other-name.`,
+      };
     }
 
-    // Within limits — add as pending.
+    // OTP group (or rate-limited — name unverified) → add as pending normally.
     const result = await client.query(
       `INSERT INTO groups (link, description, name, image_url, status, last_checked_at)
        VALUES ($1, $2, $3, $4, 'pending', NOW())
@@ -163,8 +213,6 @@ async function processOne(
       imageUrl: r.image_url ?? null,
       reason: preview.rateLimited
         ? "Saved as pending — WhatsApp rate-limited verification, will retry automatically."
-        : !isOtp
-        ? `Added as pending. Note: This group's name does not contain 'OTP'. It counts toward the 20% other-name allowance.`
         : undefined,
     };
   } catch (err: any) {
@@ -213,7 +261,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     description?: string;
   };
 
-  // Collect candidate raw inputs from any of the supported fields.
   const rawSources: string[] = [];
   if (typeof text === "string" && text.trim()) rawSources.push(text);
   if (Array.isArray(links)) {
@@ -227,7 +274,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // Extract + dedupe across all sources, ignore everything that isn't a valid link.
   const merged = extractWhatsAppLinks(rawSources.join("\n"));
 
   if (merged.length === 0) {
@@ -246,6 +292,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const results = await processBatch(toProcess, desc);
 
+  // Current ratio snapshot for the summary
+  const dbClient = await getPool().connect();
+  let currentStats: any = null;
+  try {
+    currentStats = await getRatioStats(dbClient);
+  } finally {
+    dbClient.release();
+  }
+
   const summary = {
     received: merged.length,
     processed: toProcess.length,
@@ -256,12 +311,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     truncated,
     maxPerSubmit: MAX_LINKS,
     maxAdds: MAX_ADDS,
-    policy: "80% OTP groups / 20% other-name groups. Groups exceeding the 20% other-name cap are sent to review.",
+    currentRatio: currentStats
+      ? {
+          totalApproved: currentStats.total,
+          otpGroups: currentStats.otpCount,
+          otherNameGroups: currentStats.otherCount,
+          allowedOtherMax: currentStats.allowedOther,
+          availableOtherSlots: currentStats.availableSlots,
+          otherPercent: currentStats.currentOtherPercent,
+          otpPercent:
+            currentStats.total > 0
+              ? ((currentStats.otpCount / currentStats.total) * 100).toFixed(1) + "%"
+              : "0%",
+          rule: `80% OTP groups / 20% other-name groups (max ${currentStats.allowedOther} other-name slots for ${currentStats.total} approved groups)`,
+        }
+      : null,
   };
 
   const allFailed = toProcess.length === 1 && results[0].status === "failed";
-  return res.status(allFailed ? 400 : 200).json({
-    summary,
-    results,
-  });
+  return res.status(allFailed ? 400 : 200).json({ summary, results });
 }
