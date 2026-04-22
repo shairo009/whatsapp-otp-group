@@ -20,14 +20,17 @@
   .btn-danger{background:#dc2626;color:#fff}
   .btn-warn{background:#f59e0b;color:#1a0e00}
   .btn-ghost{background:#334155;color:#e2e8f0}
+  .btn-review{background:#6366f1;color:#fff}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .tabs{display:flex;gap:4px;margin:18px 0 12px;border-bottom:1px solid #334155}
   .tab{padding:10px 14px;cursor:pointer;font-size:14px;font-weight:600;color:#94a3b8;border-bottom:2px solid transparent}
   .tab.active{color:#25d366;border-color:#25d366}
   .badge{display:inline-block;background:#dc2626;color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:6px;font-weight:700}
+  .badge-review{background:#6366f1}
   .panel{display:none}
   .panel.active{display:block}
   .row{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+  .row.review-row{border-color:#6366f155}
   .dp{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#075e54,#25d366);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;overflow:hidden}
   .dp img{width:100%;height:100%;object-fit:cover}
   .meta{flex:1;min-width:200px}
@@ -40,14 +43,21 @@
   .pill.pending{background:#f59e0b22;color:#fbbf24}
   .pill.approved{background:#25d36622;color:#4ade80}
   .pill.removed{background:#dc262622;color:#fca5a5}
+  .pill.review{background:#6366f122;color:#a5b4fc}
   .pill.reports{background:#dc262633;color:#fca5a5;margin-left:6px}
   .empty{padding:30px;text-align:center;color:#64748b;background:#1e293b;border-radius:10px}
   .reason{font-weight:700;color:#fbbf24}
+  .review-reason{font-weight:600;color:#a5b4fc;font-size:12px;margin-top:5px;background:#6366f111;border-left:3px solid #6366f1;padding:6px 10px;border-radius:4px}
   .details{font-size:13px;color:#cbd5e1;margin-top:4px}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;padding:10px 16px;border-radius:8px;font-size:13px;display:none;max-width:calc(100% - 40px);text-align:center}
   .toast.show{display:block}
+  .ratio-bar{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13px}
+  .ratio-bar .title{font-weight:700;margin-bottom:8px;color:#e2e8f0}
+  .ratio-track{height:10px;border-radius:999px;background:#334155;overflow:hidden;margin:6px 0}
+  .ratio-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#25d366,#16a34a);transition:width .4s}
+  .ratio-fill.over{background:linear-gradient(90deg,#f59e0b,#dc2626)}
+  .ratio-labels{display:flex;justify-content:space-between;color:#94a3b8;font-size:12px}
 
-  /* Tablet */
   @media(max-width:768px){
     .container{padding:16px 14px}
     header{padding:14px 0}
@@ -55,7 +65,6 @@
     .meta{min-width:0;flex:1 1 100%}
     .actions{flex:1 1 100%}
   }
-  /* Mobile */
   @media(max-width:520px){
     .container{padding:14px 12px}
     header{padding:12px 0}
@@ -97,18 +106,29 @@
   <div class="key-bar">
     <input id="adminKey" type="password" placeholder="Admin key" autocomplete="off" />
     <button class="btn btn-primary" id="loginBtn">Load</button>
-    <button class="btn btn-warn" id="cronBtn" title="Manually run the 5-day verification">Run verify now</button>
-    <button class="btn btn-ghost" id="dedupeBtn" title="Find and remove duplicate groups (same name in different styles)">Cleanup duplicates</button>
+    <button class="btn btn-warn" id="cronBtn" title="Manually run the hourly verification">Run verify now</button>
+    <button class="btn btn-ghost" id="dedupeBtn" title="Find and remove duplicate groups">Cleanup duplicates</button>
+  </div>
+
+  <div id="ratioBar" class="ratio-bar" style="display:none">
+    <div class="title">Group Ratio (80% OTP / 20% Other-name)</div>
+    <div class="ratio-track"><div class="ratio-fill" id="ratioFill" style="width:0%"></div></div>
+    <div class="ratio-labels">
+      <span id="ratioOtp">OTP: 0</span>
+      <span id="ratioOther">Other: 0 / max 0 (20%)</span>
+    </div>
   </div>
 
   <div class="tabs">
     <div class="tab active" data-tab="pending">Pending <span id="cPending" class="badge" style="display:none"></span></div>
+    <div class="tab" data-tab="review">Review <span id="cReview" class="badge badge-review" style="display:none"></span></div>
     <div class="tab" data-tab="reports">Reports <span id="cReports" class="badge" style="display:none"></span></div>
     <div class="tab" data-tab="approved">Approved</div>
     <div class="tab" data-tab="removed">Removed</div>
   </div>
 
   <div id="panel-pending" class="panel active"></div>
+  <div id="panel-review" class="panel"></div>
   <div id="panel-reports" class="panel"></div>
   <div id="panel-approved" class="panel"></div>
   <div id="panel-removed" class="panel"></div>
@@ -125,7 +145,7 @@ function toast(msg){
   const t = $('#toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'), 2000);
+  setTimeout(()=>t.classList.remove('show'), 2500);
 }
 
 function escapeHtml(s){
@@ -134,7 +154,7 @@ function escapeHtml(s){
 function initials(name){ if(!name) return 'G'; return name.trim().split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase(); }
 function dpHTML(g){
   return g.imageUrl
-    ? `<div class="dp"><img src="${escapeHtml(g.imageUrl)}" onerror="this.outerHTML='${initials(g.name)}'"></div>`
+    ? `<div class="dp"><img src="${escapeHtml(g.imageUrl)}" onerror="this.outerHTML='<div class=dp>${initials(g.name)}</div>'"></div>`
     : `<div class="dp">${initials(g.name)}</div>`;
 }
 
@@ -163,17 +183,43 @@ async function loadAll(){
   }
 }
 
+function updateRatioBar(groups){
+  const approved = groups.filter(g=>g.status==='approved');
+  const total = approved.length;
+  if(total === 0){ $('#ratioBar').style.display='none'; return; }
+  const otpCount = approved.filter(g=>g.name && /otp/i.test(g.name)).length;
+  const otherCount = total - otpCount;
+  const allowedOther = Math.floor(total * 0.20);
+  const otherPct = (otherCount / total * 100).toFixed(1);
+  const isOver = otherCount > allowedOther;
+  $('#ratioBar').style.display = 'block';
+  $('#ratioFill').style.width = otherPct + '%';
+  $('#ratioFill').className = 'ratio-fill' + (isOver ? ' over' : '');
+  $('#ratioOtp').textContent = `OTP: ${otpCount} (${(otpCount/total*100).toFixed(1)}%)`;
+  $('#ratioOther').textContent = `Other: ${otherCount}/${allowedOther} (${otherPct}% · max 20%)`;
+}
+
 function renderGroups(groups){
   const pending = groups.filter(g=>g.status==='pending');
+  const review  = groups.filter(g=>g.status==='review');
   const approved = groups.filter(g=>g.status==='approved');
   const removed = groups.filter(g=>g.status==='removed');
 
   $('#cPending').textContent = pending.length;
   $('#cPending').style.display = pending.length ? 'inline-block' : 'none';
+  $('#cReview').textContent = review.length;
+  $('#cReview').style.display = review.length ? 'inline-block' : 'none';
 
   $('#panel-pending').innerHTML = pending.length
     ? pending.map(g=>groupRow(g, ['approve','delete'])).join('')
     : '<div class="empty">No pending submissions.</div>';
+
+  $('#panel-review').innerHTML = review.length
+    ? `<div style="font-size:13px;color:#a5b4fc;margin-bottom:12px;padding:10px 14px;background:#6366f111;border-radius:8px;border:1px solid #6366f133">
+        These groups are in review. They were sent here because their invite link appeared broken/reset, their name is not OTP, or the 20% other-name limit is full. Approve to add to the listing, or delete to discard.
+       </div>` + review.map(g=>groupRow(g, ['approve','delete'], true)).join('')
+    : '<div class="empty">No groups in review. All is well.</div>';
+
   $('#panel-approved').innerHTML = approved.length
     ? approved.map(g=>groupRow(g, ['remove','delete'])).join('')
     : '<div class="empty">No approved groups.</div>';
@@ -181,12 +227,14 @@ function renderGroups(groups){
     ? removed.map(g=>groupRow(g, ['approve','delete'])).join('')
     : '<div class="empty">No removed groups.</div>';
 
+  updateRatioBar(groups);
+
   document.querySelectorAll('[data-action]').forEach(b=>{
     b.addEventListener('click', () => doAction(b.dataset.action, b.dataset.id));
   });
 }
 
-function groupRow(g, actions){
+function groupRow(g, actions, isReview=false){
   const name = g.name || 'WhatsApp Group';
   const reportPill = g.reportCount ? `<span class="pill reports">${g.reportCount} report${g.reportCount>1?'s':''}</span>`:'';
   const lastChecked = g.lastCheckedAt ? new Date(g.lastCheckedAt).toLocaleString() : 'never';
@@ -195,17 +243,20 @@ function groupRow(g, actions){
     if(a==='remove')  return `<button class="btn btn-warn"   data-action="remove"  data-id="${g.id}">Remove</button>`;
     if(a==='delete')  return `<button class="btn btn-danger" data-action="delete"  data-id="${g.id}">Delete</button>`;
   }).join('');
-  const removedInfo = (g.status === 'removed' && (g.removedReason || g.removedAt)) ? `
-        <div class="reason">⚠ ${escapeHtml(g.removedReason || 'Removed')}${g.removedAt?` <span class="small" style="color:#9ca3af;font-weight:400">· ${new Date(g.removedAt).toLocaleString()}</span>`:''}</div>` : '';
+  const removedInfo = ((g.status==='removed'||g.status==='review') && g.removedReason) ? `
+    <div class="${g.status==='review'?'review-reason':'reason'}">
+      ${g.status==='review'?'📋':'⚠'} ${escapeHtml(g.removedReason)}
+      ${g.removedAt?`<span class="small" style="color:#9ca3af;font-weight:400"> · ${new Date(g.removedAt).toLocaleString()}</span>`:''}
+    </div>` : '';
   return `
-    <div class="row">
+    <div class="row${isReview?' review-row':''}">
       ${dpHTML({...g,name})}
       <div class="meta">
         <div class="name">${escapeHtml(name)} <span class="pill ${g.status}">${g.status}</span>${reportPill}</div>
         ${removedInfo}
         ${g.description?`<div class="desc">${escapeHtml(g.description)}</div>`:''}
         <div class="small"><a href="${escapeHtml(g.link)}" target="_blank">${escapeHtml(g.link)}</a></div>
-        <div class="small">Last verified: ${lastChecked} · Submitted: ${new Date(g.createdAt).toLocaleString()}</div>
+        <div class="small">Last checked: ${lastChecked} · Submitted: ${new Date(g.createdAt).toLocaleString()}</div>
       </div>
       <div class="actions">${btns}</div>
     </div>`;
@@ -237,17 +288,17 @@ function reportRow(r){
       <div class="actions">
         <button class="btn btn-warn" data-rep-action="remove-group" data-gid="${r.groupId}">Remove group</button>
         <button class="btn btn-ghost" data-rep-action="dismiss" data-id="${r.id}">Dismiss</button>
-        <button class="btn btn-ghost" data-rep-action="clear-all" data-gid="${r.groupId}">Clear all reports for this group</button>
+        <button class="btn btn-ghost" data-rep-action="clear-all" data-gid="${r.groupId}">Clear all reports</button>
       </div>
     </div>`;
 }
 
 async function doAction(action, id){
-  if((action==='delete') && !confirm('Delete this group permanently?')) return;
+  if(action==='delete' && !confirm('Delete this group permanently?')) return;
   let reason;
   if(action==='remove'){
-    reason = prompt('Reason for removing this group? (shown in the Removed tab)', 'Removed by admin');
-    if(reason === null) return; // cancelled
+    reason = prompt('Reason for removing?', 'Removed by admin');
+    if(reason === null) return;
   }
   try{
     const body = { action, groupId: Number(id) };
@@ -257,6 +308,7 @@ async function doAction(action, id){
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
 }
+
 async function doReportAction(action, id, gid){
   try{
     if(action==='dismiss'){
@@ -264,9 +316,9 @@ async function doReportAction(action, id, gid){
     } else if(action==='clear-all'){
       await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'clear-reports',groupId:Number(gid)})});
     } else if(action==='remove-group'){
-      const reason = prompt('Reason for removing this reported group?', 'Removed after user report');
+      const reason = prompt('Reason for removing this group?', 'Removed after user report');
       if(reason === null) return;
-      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'remove',groupId:Number(gid),reason: reason || 'Removed after user report'})});
+      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'remove',groupId:Number(gid),reason: reason||'Removed after user report'})});
     }
     toast('Done');
     loadAll();
@@ -288,23 +340,25 @@ $('#loginBtn').addEventListener('click', () => {
   localStorage.setItem(KEY_STORAGE, key);
   loadAll();
 });
+
 $('#cronBtn').addEventListener('click', async () => {
   if(!key) return toast('Enter admin key first');
-  if(!confirm('Run verification on all approved groups now? Dead links will be auto-removed.')) return;
+  if(!confirm('Run verification now? Non-OTP and broken groups will be sent to Review (not removed).')) return;
   $('#cronBtn').disabled = true;
   $('#cronBtn').textContent = 'Running…';
   try{
     const r = await fetch('/api/cron/verify?key='+encodeURIComponent(key));
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'Failed');
-    toast(`Checked ${data.checked} · Removed ${data.removed}`);
+    toast(`Checked ${data.checked||0} · Review: ${data.sentToReview||0}`);
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
   finally{ $('#cronBtn').disabled=false; $('#cronBtn').textContent='Run verify now'; }
 });
+
 $('#dedupeBtn').addEventListener('click', async () => {
   if(!key) return toast('Enter admin key first');
-  if(!confirm('Find duplicate groups (same name in different styles) and move the newer copies to Removed? The oldest copy of each group is kept. You can recover anything from the Removed tab.')) return;
+  if(!confirm('Find duplicate groups and remove newer copies? Oldest copy is kept. Recoverable from Removed tab.')) return;
   $('#dedupeBtn').disabled = true;
   $('#dedupeBtn').textContent = 'Scanning…';
   try{
