@@ -20,7 +20,6 @@
   .btn-danger{background:#dc2626;color:#fff}
   .btn-warn{background:#f59e0b;color:#1a0e00}
   .btn-ghost{background:#334155;color:#e2e8f0}
-  .btn-review{background:#6366f1;color:#fff}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   .tabs{display:flex;gap:4px;margin:18px 0 12px;border-bottom:1px solid #334155}
   .tab{padding:10px 14px;cursor:pointer;font-size:14px;font-weight:600;color:#94a3b8;border-bottom:2px solid transparent}
@@ -30,12 +29,12 @@
   .panel{display:none}
   .panel.active{display:block}
   .row{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
-  .row.review-row{border-color:#6366f155}
+  .row.review-row{border-color:#6366f155;background:#1a1a2e}
+  .row.warn-row{border-color:#f59e0b44}
   .dp{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#075e54,#25d366);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:18px;overflow:hidden}
   .dp img{width:100%;height:100%;object-fit:cover}
   .meta{flex:1;min-width:200px}
   .meta .name{font-weight:700;font-size:15px;margin-bottom:2px}
-  .meta .desc{font-size:13px;color:#cbd5e1;margin:4px 0}
   .meta .small{font-size:12px;color:#94a3b8;word-break:break-all}
   .meta a{color:#67e8f9}
   .actions{display:flex;gap:6px;flex-wrap:wrap}
@@ -46,9 +45,14 @@
   .pill.review{background:#6366f122;color:#a5b4fc}
   .pill.reports{background:#dc262633;color:#fca5a5;margin-left:6px}
   .empty{padding:30px;text-align:center;color:#64748b;background:#1e293b;border-radius:10px}
-  .reason{font-weight:700;color:#fbbf24}
-  .review-reason{font-weight:600;color:#a5b4fc;font-size:12px;margin-top:5px;background:#6366f111;border-left:3px solid #6366f1;padding:6px 10px;border-radius:4px}
-  .details{font-size:13px;color:#cbd5e1;margin-top:4px}
+
+  /* Reason boxes */
+  .reason-box{margin-top:6px;padding:7px 11px;border-radius:6px;font-size:12px;font-weight:600;line-height:1.5}
+  .reason-box.review{background:#6366f115;border-left:3px solid #6366f1;color:#c7d2fe}
+  .reason-box.warn{background:#f59e0b15;border-left:3px solid #f59e0b;color:#fcd34d}
+  .reason-box.removed{background:#dc262615;border-left:3px solid #dc2626;color:#fca5a5}
+  .reason-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;opacity:.7;display:block;margin-bottom:2px}
+
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid #334155;padding:10px 16px;border-radius:8px;font-size:13px;display:none;max-width:calc(100% - 40px);text-align:center}
   .toast.show{display:block}
   .ratio-bar{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13px}
@@ -69,7 +73,6 @@
     .container{padding:14px 12px}
     header{padding:12px 0}
     header h1{font-size:18px}
-    header .sub{font-size:12px}
     .key-bar{flex-wrap:wrap;gap:8px}
     .key-bar input{flex:1 1 100%;min-width:0;padding:11px 12px;font-size:14px;min-height:44px}
     .key-bar .btn{flex:1 1 calc(50% - 4px);min-height:44px;padding:11px 12px}
@@ -80,7 +83,7 @@
     .dp{width:42px;height:42px;font-size:16px}
     .meta{flex:1 1 100%;min-width:0}
     .meta .name{font-size:14px}
-    .meta .desc,.meta .small{font-size:12px}
+    .meta .small{font-size:12px}
     .actions{flex:1 1 100%;gap:6px}
     .btn{padding:10px 12px;font-size:12.5px;min-height:42px;flex:1 1 auto}
     .pill{font-size:10.5px}
@@ -111,11 +114,11 @@
   </div>
 
   <div id="ratioBar" class="ratio-bar" style="display:none">
-    <div class="title">Group Ratio (80% OTP / 20% Other-name)</div>
+    <div class="title">Group Ratio — 80% OTP / 20% Other-name</div>
     <div class="ratio-track"><div class="ratio-fill" id="ratioFill" style="width:0%"></div></div>
     <div class="ratio-labels">
       <span id="ratioOtp">OTP: 0</span>
-      <span id="ratioOther">Other: 0 / max 0 (20%)</span>
+      <span id="ratioOther">Other: 0 / max 0</span>
     </div>
   </div>
 
@@ -141,20 +144,32 @@ const $ = s => document.querySelector(s);
 const KEY_STORAGE = 'wog_admin_key';
 let key = '';
 
+function isOtpName(name){ return name && /otp/i.test(name); }
+
+// Derive a human-readable reason if the DB reason is empty
+function deriveReason(g){
+  if(g.removedReason) return g.removedReason;
+  if(g.status === 'review'){
+    if(g.name && !isOtpName(g.name)) return `Group name "${g.name}" does not contain 'OTP'. Policy: 80% of listed groups must be OTP groups.`;
+    if(g.brokenSince) return `Link appears broken since ${new Date(g.brokenSince).toLocaleString()}. Sent to review for admin verification.`;
+    return 'Sent to review by the automated cron check. Please verify the group link and approve or delete.';
+  }
+  return null;
+}
+
 function toast(msg){
   const t = $('#toast');
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2500);
 }
-
 function escapeHtml(s){
   return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function initials(name){ if(!name) return 'G'; return name.trim().split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase(); }
 function dpHTML(g){
   return g.imageUrl
-    ? `<div class="dp"><img src="${escapeHtml(g.imageUrl)}" onerror="this.outerHTML='<div class=dp>${initials(g.name)}</div>'"></div>`
+    ? `<div class="dp"><img src="${escapeHtml(g.imageUrl)}" onerror="this.parentNode.innerHTML='${initials(g.name)}'"></div>`
     : `<div class="dp">${initials(g.name)}</div>`;
 }
 
@@ -187,7 +202,7 @@ function updateRatioBar(groups){
   const approved = groups.filter(g=>g.status==='approved');
   const total = approved.length;
   if(total === 0){ $('#ratioBar').style.display='none'; return; }
-  const otpCount = approved.filter(g=>g.name && /otp/i.test(g.name)).length;
+  const otpCount = approved.filter(g=>isOtpName(g.name)).length;
   const otherCount = total - otpCount;
   const allowedOther = Math.floor(total * 0.20);
   const otherPct = (otherCount / total * 100).toFixed(1);
@@ -196,14 +211,14 @@ function updateRatioBar(groups){
   $('#ratioFill').style.width = otherPct + '%';
   $('#ratioFill').className = 'ratio-fill' + (isOver ? ' over' : '');
   $('#ratioOtp').textContent = `OTP: ${otpCount} (${(otpCount/total*100).toFixed(1)}%)`;
-  $('#ratioOther').textContent = `Other: ${otherCount}/${allowedOther} (${otherPct}% · max 20%)`;
+  $('#ratioOther').textContent = `Other: ${otherCount}/${allowedOther} — ${otherPct}% (max 20%)`;
 }
 
 function renderGroups(groups){
-  const pending = groups.filter(g=>g.status==='pending');
-  const review  = groups.filter(g=>g.status==='review');
+  const pending  = groups.filter(g=>g.status==='pending');
+  const review   = groups.filter(g=>g.status==='review');
   const approved = groups.filter(g=>g.status==='approved');
-  const removed = groups.filter(g=>g.status==='removed');
+  const removed  = groups.filter(g=>g.status==='removed');
 
   $('#cPending').textContent = pending.length;
   $('#cPending').style.display = pending.length ? 'inline-block' : 'none';
@@ -211,52 +226,64 @@ function renderGroups(groups){
   $('#cReview').style.display = review.length ? 'inline-block' : 'none';
 
   $('#panel-pending').innerHTML = pending.length
-    ? pending.map(g=>groupRow(g, ['approve','delete'])).join('')
+    ? pending.map(g=>groupRow(g,['approve','delete'])).join('')
     : '<div class="empty">No pending submissions.</div>';
 
   $('#panel-review').innerHTML = review.length
     ? `<div style="font-size:13px;color:#a5b4fc;margin-bottom:12px;padding:10px 14px;background:#6366f111;border-radius:8px;border:1px solid #6366f133">
-        These groups are in review. They were sent here because their invite link appeared broken/reset, their name is not OTP, or the 20% other-name limit is full. Approve to add to the listing, or delete to discard.
-       </div>` + review.map(g=>groupRow(g, ['approve','delete'], true)).join('')
-    : '<div class="empty">No groups in review. All is well.</div>';
+         <b>Review Queue</b> — ye groups broken link, non-OTP naam, ya 20% limit ki wajah se review mein bheje gaye hain. Approve karo ya Delete karo.
+       </div>` + review.map(g=>groupRow(g,['approve','delete'],true)).join('')
+    : '<div class="empty">Review queue khaali hai. Sab theek hai.</div>';
 
   $('#panel-approved').innerHTML = approved.length
-    ? approved.map(g=>groupRow(g, ['remove','delete'])).join('')
+    ? approved.map(g=>groupRow(g,['remove','delete'])).join('')
     : '<div class="empty">No approved groups.</div>';
+
   $('#panel-removed').innerHTML = removed.length
-    ? removed.map(g=>groupRow(g, ['approve','delete'])).join('')
+    ? removed.map(g=>groupRow(g,['approve','delete'])).join('')
     : '<div class="empty">No removed groups.</div>';
 
   updateRatioBar(groups);
 
   document.querySelectorAll('[data-action]').forEach(b=>{
-    b.addEventListener('click', () => doAction(b.dataset.action, b.dataset.id));
+    b.addEventListener('click', ()=>doAction(b.dataset.action, b.dataset.id));
   });
 }
 
 function groupRow(g, actions, isReview=false){
   const name = g.name || 'WhatsApp Group';
   const reportPill = g.reportCount ? `<span class="pill reports">${g.reportCount} report${g.reportCount>1?'s':''}</span>`:'';
-  const lastChecked = g.lastCheckedAt ? new Date(g.lastCheckedAt).toLocaleString() : 'never';
+  const lastChecked = g.lastCheckedAt ? new Date(g.lastCheckedAt).toLocaleString() : 'kabhi nahi';
+
+  // Build reason box
+  let reasonHtml = '';
+  if(isReview || g.status==='review'){
+    const reason = deriveReason(g);
+    reasonHtml = `<div class="reason-box review"><span class="reason-label">📋 Review ka karan</span>${escapeHtml(reason)}</div>`;
+  } else if(g.status==='pending' && g.name && !isOtpName(g.name)){
+    reasonHtml = `<div class="reason-box warn"><span class="reason-label">⚠ Dhyan dijiye</span>Is group ka naam "${escapeHtml(g.name)}" mein 'OTP' nahi hai. Policy: 80% groups OTP hone chahiye.</div>`;
+  } else if(g.status==='removed'){
+    const reason = g.removedReason || 'Admin ne remove kiya';
+    reasonHtml = `<div class="reason-box removed"><span class="reason-label">🚫 Remove ka karan</span>${escapeHtml(reason)}${g.removedAt?` · ${new Date(g.removedAt).toLocaleString()}`:''}</div>`;
+  }
+
   const btns = actions.map(a=>{
     if(a==='approve') return `<button class="btn btn-primary" data-action="approve" data-id="${g.id}">Approve</button>`;
     if(a==='remove')  return `<button class="btn btn-warn"   data-action="remove"  data-id="${g.id}">Remove</button>`;
     if(a==='delete')  return `<button class="btn btn-danger" data-action="delete"  data-id="${g.id}">Delete</button>`;
   }).join('');
-  const removedInfo = ((g.status==='removed'||g.status==='review') && g.removedReason) ? `
-    <div class="${g.status==='review'?'review-reason':'reason'}">
-      ${g.status==='review'?'📋':'⚠'} ${escapeHtml(g.removedReason)}
-      ${g.removedAt?`<span class="small" style="color:#9ca3af;font-weight:400"> · ${new Date(g.removedAt).toLocaleString()}</span>`:''}
-    </div>` : '';
+
+  const rowClass = isReview ? 'row review-row' : (g.status==='pending' && g.name && !isOtpName(g.name) ? 'row warn-row' : 'row');
+
   return `
-    <div class="row${isReview?' review-row':''}">
+    <div class="${rowClass}">
       ${dpHTML({...g,name})}
       <div class="meta">
         <div class="name">${escapeHtml(name)} <span class="pill ${g.status}">${g.status}</span>${reportPill}</div>
-        ${removedInfo}
-        ${g.description?`<div class="desc">${escapeHtml(g.description)}</div>`:''}
+        ${reasonHtml}
+        ${g.description?`<div class="small" style="margin-top:4px">Description: ${escapeHtml(g.description)}</div>`:''}
         <div class="small"><a href="${escapeHtml(g.link)}" target="_blank">${escapeHtml(g.link)}</a></div>
-        <div class="small">Last checked: ${lastChecked} · Submitted: ${new Date(g.createdAt).toLocaleString()}</div>
+        <div class="small">Last checked: ${lastChecked} · Submit: ${new Date(g.createdAt).toLocaleString()}</div>
       </div>
       <div class="actions">${btns}</div>
     </div>`;
@@ -267,9 +294,9 @@ function renderReports(reports){
   $('#cReports').style.display = reports.length ? 'inline-block' : 'none';
   $('#panel-reports').innerHTML = reports.length
     ? reports.map(r=>reportRow(r)).join('')
-    : '<div class="empty">No reports yet.</div>';
+    : '<div class="empty">Koi report nahi.</div>';
   document.querySelectorAll('[data-rep-action]').forEach(b=>{
-    b.addEventListener('click', () => doReportAction(b.dataset.repAction, b.dataset.id, b.dataset.gid));
+    b.addEventListener('click', ()=>doReportAction(b.dataset.repAction, b.dataset.id, b.dataset.gid));
   });
 }
 
@@ -280,8 +307,7 @@ function reportRow(r){
       ${dpHTML(g)}
       <div class="meta">
         <div class="name">${escapeHtml(g.name||'WhatsApp Group')} <span class="pill ${g.status}">${g.status}</span></div>
-        <div class="reason">⚠ ${escapeHtml(r.reason)}</div>
-        ${r.details?`<div class="details">"${escapeHtml(r.details)}"</div>`:''}
+        <div class="reason-box warn"><span class="reason-label">⚠ Report ka karan</span>${escapeHtml(r.reason)}${r.details?`<br><i>"${escapeHtml(r.details)}"</i>`:''}</div>
         <div class="small"><a href="${escapeHtml(g.link)}" target="_blank">${escapeHtml(g.link)}</a></div>
         <div class="small">Reported: ${new Date(r.createdAt).toLocaleString()}</div>
       </div>
@@ -294,17 +320,17 @@ function reportRow(r){
 }
 
 async function doAction(action, id){
-  if(action==='delete' && !confirm('Delete this group permanently?')) return;
+  if(action==='delete' && !confirm('Is group ko permanently delete karo?')) return;
   let reason;
   if(action==='remove'){
-    reason = prompt('Reason for removing?', 'Removed by admin');
+    reason = prompt('Remove karne ka karan?', 'Admin ne remove kiya');
     if(reason === null) return;
   }
   try{
     const body = { action, groupId: Number(id) };
-    if(reason !== undefined) body.reason = reason || 'Removed by admin';
+    if(reason !== undefined) body.reason = reason || 'Admin ne remove kiya';
     await api('/api/admin/action',{method:'POST',body:JSON.stringify(body)});
-    toast('Done');
+    toast('Ho gaya!');
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
 }
@@ -316,11 +342,11 @@ async function doReportAction(action, id, gid){
     } else if(action==='clear-all'){
       await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'clear-reports',groupId:Number(gid)})});
     } else if(action==='remove-group'){
-      const reason = prompt('Reason for removing this group?', 'Removed after user report');
+      const reason = prompt('Remove karne ka karan?', 'User report ke baad remove kiya');
       if(reason === null) return;
-      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'remove',groupId:Number(gid),reason: reason||'Removed after user report'})});
+      await api('/api/admin/action',{method:'POST',body:JSON.stringify({action:'remove',groupId:Number(gid),reason:reason||'User report ke baad remove kiya'})});
     }
-    toast('Done');
+    toast('Ho gaya!');
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
 }
@@ -334,42 +360,42 @@ document.querySelectorAll('.tab').forEach(t=>{
   });
 });
 
-$('#loginBtn').addEventListener('click', () => {
+$('#loginBtn').addEventListener('click', ()=>{
   key = $('#adminKey').value.trim();
-  if(!key) return toast('Enter admin key');
+  if(!key) return toast('Admin key daalo');
   localStorage.setItem(KEY_STORAGE, key);
   loadAll();
 });
 
-$('#cronBtn').addEventListener('click', async () => {
-  if(!key) return toast('Enter admin key first');
-  if(!confirm('Run verification now? Non-OTP and broken groups will be sent to Review (not removed).')) return;
+$('#cronBtn').addEventListener('click', async ()=>{
+  if(!key) return toast('Pehle admin key daalo');
+  if(!confirm('Abhi verification chalao? Non-OTP aur broken groups Review mein bheje jayenge (remove nahi honge).')) return;
   $('#cronBtn').disabled = true;
-  $('#cronBtn').textContent = 'Running…';
+  $('#cronBtn').textContent = 'Chal raha hai…';
   try{
     const r = await fetch('/api/cron/verify?key='+encodeURIComponent(key));
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'Failed');
-    toast(`Checked ${data.checked||0} · Review: ${data.sentToReview||0}`);
+    toast(`Check kiye: ${data.checked||0} · Review mein bheje: ${data.sentToReview||0}`);
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
   finally{ $('#cronBtn').disabled=false; $('#cronBtn').textContent='Run verify now'; }
 });
 
-$('#dedupeBtn').addEventListener('click', async () => {
-  if(!key) return toast('Enter admin key first');
-  if(!confirm('Find duplicate groups and remove newer copies? Oldest copy is kept. Recoverable from Removed tab.')) return;
+$('#dedupeBtn').addEventListener('click', async ()=>{
+  if(!key) return toast('Pehle admin key daalo');
+  if(!confirm('Duplicate groups dhundho aur nayi copies remove karo? Sabse purani copy rakhi jayegi.')) return;
   $('#dedupeBtn').disabled = true;
-  $('#dedupeBtn').textContent = 'Scanning…';
+  $('#dedupeBtn').textContent = 'Scan ho raha hai…';
   try{
-    const r = await fetch('/api/admin/action', {
+    const r = await fetch('/api/admin/action',{
       method:'POST',
-      headers:{ 'Content-Type':'application/json', 'X-Admin-Key': key },
-      body: JSON.stringify({ action: 'dedupe-names' })
+      headers:{'Content-Type':'application/json','X-Admin-Key':key},
+      body:JSON.stringify({action:'dedupe-names'})
     });
     const data = await r.json();
-    if(!r.ok) throw new Error(data.error || 'Failed');
-    toast(`Scanned ${data.scanned} · ${data.duplicateGroups} duplicate set(s) · Removed ${data.removed}`);
+    if(!r.ok) throw new Error(data.error||'Failed');
+    toast(`Scan: ${data.scanned} · Duplicate sets: ${data.duplicateGroups} · Remove: ${data.removed}`);
     loadAll();
   }catch(e){ toast('Failed: '+e.message); }
   finally{ $('#dedupeBtn').disabled=false; $('#dedupeBtn').textContent='Cleanup duplicates'; }
