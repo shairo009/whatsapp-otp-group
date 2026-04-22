@@ -317,8 +317,9 @@
     .group-desc{display:none}
     .group-actions{width:100%;gap:0;margin:0 0 2px 0}
     .group-actions .btn{padding:2px 4px;font-size:9.5px;min-height:22px;border-radius:4px;width:100%}
-    .report-label{display:none}
-    .report-row{flex-direction:row;gap:3px;width:100%;margin-top:0}
+    .report-label{display:flex;font-size:8.5px;margin:8px 0 4px;width:100%;align-items:center;gap:8px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.1em}
+    .report-label::before,.report-label::after{content:"";flex:1;height:1px;background:var(--border)}
+    .report-row{display:flex;flex-direction:row;gap:6px;width:100%;margin-top:0}
     .report-row .btn{font-size:8px;padding:2px 3px;min-height:20px}
     .pager .btn{padding:8px 12px;min-height:38px;font-size:12.5px}
   }
@@ -662,6 +663,7 @@ function groupCardHTML(g){
       </div>
       <div class="group-actions">
         <button class="btn btn-primary" data-join="${g.id}" data-link="${escapeHtml(g.link)}" type="button">Join group</button>
+        <div class="report-label">Report</div>
         <div class="report-row">
           <button class="btn btn-danger" data-report="${g.id}" data-name="${escapeHtml(name)}" type="button">Not Working</button>
           <button class="btn btn-warning" data-msgoff="${g.id}" data-name="${escapeHtml(name)}" type="button">Messages Off</button>
