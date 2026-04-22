@@ -7,6 +7,11 @@ import { fetchGroupPreview, nameContainsOTP } from "../_lib/whatsapp";
 // (cached previews, geo blips, weird UA detection, etc.).
 const SOFT_BROKEN_GRACE_HOURS = 24;
 
+// 80% of approved slots are reserved for OTP groups.
+// Up to 20% may be non-OTP (other-name) groups.
+// Groups that exceed this cap are moved to the review queue.
+const OTHER_NAME_MAX_RATIO = 0.20;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cronSecret = process.env.CRON_SECRET;
   const auth = req.headers.authorization || "";
@@ -28,8 +33,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const softBroken: any[] = [];
   const recovered: any[] = [];
   const skipped: any[] = [];
+  const sentToReview: any[] = [];
   try {
-    // Ensure broken_since + removed_reason columns exist (idempotent migration)
+    // Ensure required columns exist (idempotent migrations)
     await client.query(
       "ALTER TABLE groups ADD COLUMN IF NOT EXISTS broken_since TIMESTAMP"
     );
@@ -39,6 +45,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await client.query(
       "ALTER TABLE groups ADD COLUMN IF NOT EXISTS removed_at TIMESTAMP"
     );
+
+    // --- RATIO ENFORCEMENT ---
+    // Before doing link checks, enforce the 80%/20% OTP/other-name ratio on
+    // currently approved groups. If other-name groups exceed 20% of total
+    // approved, move the excess (least recently checked first) to review.
+    const ratioResult = await client.query(
+      `SELECT id, name, last_checked_at FROM groups
+       WHERE status = 'approved' AND name IS NOT NULL
+       ORDER BY last_checked_at ASC NULLS FIRST`
+    );
+    const allApproved = ratioResult.rows;
+    const totalApproved = allApproved.length;
+    const otherApproved = allApproved.filter(
+      (r: { name: string }) => !nameContainsOTP(r.name)
+    );
+    const allowedOther = Math.floor(totalApproved * OTHER_NAME_MAX_RATIO);
+    const excessOther = otherApproved.length - allowedOther;
+
+    if (excessOther > 0) {
+      // Move the oldest-checked excess other-name approved groups to review.
+      const toReview = otherApproved.slice(0, excessOther);
+      for (const row of toReview) {
+        await client.query(
+          `UPDATE groups
+             SET status = 'review',
+                 removed_reason = $2,
+                 last_checked_at = NOW()
+           WHERE id = $1`,
+          [
+            row.id,
+            `Moved to review: the 20% other-name allowance is full. ` +
+              `Our listing maintains 80% OTP groups and up to 20% other groups. ` +
+              `This group will be reinstated when a slot opens.`,
+          ]
+        );
+        sentToReview.push({
+          id: row.id,
+          name: row.name,
+          reason: "Exceeded 20% other-name ratio in approved groups",
+        });
+      }
+    }
 
     // Tunable via query params so an external scheduler can throttle.
     const limitRaw = parseInt(String(req.query.limit ?? "25"), 10);
@@ -151,8 +199,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // SOFT broken (generic title with no member count etc.). Mark
-      // broken_since on the first hit; only remove after the grace window
-      // so we don't kill healthy links during transient WhatsApp weirdness.
+      // broken_since on the first hit; only remove after the grace window.
       if (!preview.ok && preview.softBroken) {
         const brokenSince: Date | null = row.broken_since
           ? new Date(row.broken_since)
@@ -196,28 +243,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const knowName = !!effectiveName;
       const isOtp = nameContainsOTP(effectiveName);
 
-      // OTP policy:
-      //   - Only remove when we're confident: name is known AND we saw a
-      //     real member count on the page (so the name is trustworthy)
-      //     AND the name doesn't contain OTP.
-      //   - If anything is uncertain (no name, or no member count), DO NOT
-      //     remove. Just refresh metadata; we'll catch it later.
+      // Non-OTP groups with a confirmed healthy link are sent to review,
+      // NOT removed outright. The admin can approve or reject them from
+      // the review queue. This preserves the group while enforcing the
+      // 80%/20% OTP/other-name ratio policy.
+      //
+      // Rule: up to 20% of approved groups may be non-OTP (other names).
+      // Any non-OTP group confirmed healthy → move to review so the admin
+      // decides whether to approve it within the 20% slot budget.
+      //
+      // We only act when we have a trustworthy name (not null) and a real
+      // member count from WhatsApp — same confidence bar as before.
       if (knowName && preview.hasMembers && !isOtp) {
-        const reason = `Not an OTP group (current name: "${effectiveName}")`;
         await client.query(
           `UPDATE groups
-             SET status = 'removed',
+             SET status = 'review',
                  removed_reason = $2,
-                 removed_at = NOW(),
                  last_checked_at = NOW()
            WHERE id = $1`,
-          [row.id, reason]
+          [
+            row.id,
+            `Sent to review: group name "${effectiveName}" does not contain 'OTP'. ` +
+              `Policy: 80% of listed groups must be OTP groups; up to 20% may have other names. ` +
+              `An admin will review and approve this group if an other-name slot is available.`,
+          ]
         );
-        removed.push({ id: row.id, link: row.link, reason });
+        sentToReview.push({
+          id: row.id,
+          link: row.link,
+          name: effectiveName,
+          reason: "Non-OTP name — sent to review under 20% other-name policy",
+        });
         continue;
       }
 
-      // Healthy — clear broken_since / removed_reason, refresh metadata.
+      // Healthy OTP group — clear broken_since / removed_reason, refresh metadata.
       const wasBroken = !!row.broken_since;
       await client.query(
         `UPDATE groups SET name = COALESCE($2, name),
@@ -241,11 +301,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       softBroken: softBroken.length,
       recovered: recovered.length,
       skipped: skipped.length,
+      sentToReview: sentToReview.length,
       graceHours,
+      policy: "80% OTP groups / 20% other-name groups. Non-OTP groups with healthy links are sent to review, not removed.",
       removedDetails: removed,
       softBrokenDetails: softBroken,
       recoveredDetails: recovered,
       skippedDetails: skipped,
+      sentToReviewDetails: sentToReview,
     });
   } finally {
     client.release();
