@@ -1,19 +1,21 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool } from "../_lib/db";
-import { fetchGroupPreview, nameContainsOTP } from "../_lib/whatsapp";
+import { fetchGroupPreview } from "../_lib/whatsapp";
 
 /**
  * Real-time link check fired when a user taps "Join group" on the site.
  *
- * Policy: a real, working link must NEVER be killed by a join-click.
- * Only the hourly cron is allowed to mark links as broken (broken_since /
- * removed). The join handler only blocks on signals that are virtually
- * impossible to come from a healthy link:
+ * Policy: a real, working link must NEVER be removed by a join-click.
+ * Only the hourly cron (verify.ts) is allowed to enforce the 80%/20%
+ * OTP/other-name ratio or mark links as broken/removed.
+ *
+ * The join handler only blocks on signals that are virtually impossible
+ * to come from a healthy link:
  *   - Explicit "invite revoked / reset" text in WhatsApp's own page body
  *   - Page that returned no metadata at all
  *   - Group already marked removed/rejected in our DB
- * Anything ambiguous (generic preview, rate-limit, 5xx) -> just open the
- * link and let WhatsApp itself decide.
+ * Anything ambiguous (generic preview, rate-limit, 5xx, name change) ->
+ * just open the link and let WhatsApp itself decide.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -84,26 +86,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Successful preview. Enforce OTP-only policy in real time as well —
-    // but ONLY when we have a real, specific group name to check against.
-    // Never remove on "unknown name".
-    const previewName = preview.name;
-    if (previewName && !nameContainsOTP(previewName)) {
-      await client.query(
-        `UPDATE groups
-           SET status = 'removed',
-               last_checked_at = NOW()
-         WHERE id = $1`,
-        [row.id]
-      );
-      return res.json({
-        ok: false,
-        removed: true,
-        reason: "This group is no longer an OTP group",
-      });
-    }
-
-    // Healthy — refresh metadata and clear broken flag.
+    // Healthy preview — refresh metadata and clear broken flag.
+    // NOTE: We intentionally do NOT enforce the OTP-name rule here.
+    // The 80% OTP / 20% other-name ratio is enforced by the hourly cron
+    // (verify.ts) via the review queue, not on every join click.
     await client.query(
       `UPDATE groups
          SET name = COALESCE($2, name),
