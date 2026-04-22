@@ -113,6 +113,11 @@
     <button class="btn btn-ghost" id="dedupeBtn" title="Find and remove duplicate groups">Cleanup duplicates</button>
   </div>
 
+  <div class="key-bar" style="margin-top:0">
+    <input id="botUrl" type="text" placeholder="Bot URL (e.g. https://yourbot.fly.dev)" autocomplete="off" />
+    <button class="btn btn-ghost" id="saveBotBtn">Save Bot URL</button>
+  </div>
+
   <div id="ratioBar" class="ratio-bar" style="display:none">
     <div class="title">Group Ratio — 80% OTP / 20% Other-name</div>
     <div class="ratio-track"><div class="ratio-fill" id="ratioFill" style="width:0%"></div></div>
@@ -128,6 +133,7 @@
     <div class="tab" data-tab="reports">Reports <span id="cReports" class="badge" style="display:none"></span></div>
     <div class="tab" data-tab="approved">Approved</div>
     <div class="tab" data-tab="removed">Removed</div>
+    <div class="tab" data-tab="broadcast">📢 Broadcast</div>
   </div>
 
   <div id="panel-pending" class="panel active"></div>
@@ -135,6 +141,7 @@
   <div id="panel-reports" class="panel"></div>
   <div id="panel-approved" class="panel"></div>
   <div id="panel-removed" class="panel"></div>
+  <div id="panel-broadcast" class="panel"></div>
 </main>
 
 <div class="toast" id="toast"></div>
@@ -357,6 +364,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     $('#panel-'+t.dataset.tab).classList.add('active');
+    if(t.dataset.tab==='broadcast') loadBroadcastStatus();
   });
 });
 
@@ -403,6 +411,98 @@ $('#dedupeBtn').addEventListener('click', async ()=>{
 
 const saved = localStorage.getItem(KEY_STORAGE);
 if(saved){ key = saved; $('#adminKey').value = saved; loadAll(); }
+
+const BOT_URL_KEY = 'wog_bot_url';
+let botUrl = '';
+
+function renderBroadcast(status) {
+  const lastAt = status && status.lastAt ? new Date(status.lastAt).toLocaleString() : 'Kabhi nahi';
+  const msgVal = status && status.message ? escapeHtml(status.message) : '';
+  const running = status && status.running;
+  $('#panel-broadcast').innerHTML =
+    '<div class="row" style="flex-direction:column;gap:12px">' +
+      '<div style="font-weight:700;font-size:15px">📢 Daily Broadcast Settings</div>' +
+      '<div class="reason-box review" style="font-size:12px;margin-bottom:0">' +
+        '<span class="reason-label">Kaise kaam karta hai</span>' +
+        'Bot har roz 10:00 AM IST par sabhi approved groups mein message bhejta hai. ' +
+        'Har group ke beech 5 second ka gap hota hai. Aap yahan message set karke manual broadcast bhi trigger kar sakte hain.' +
+      '</div>' +
+      '<div style="font-size:13px;color:#94a3b8">' +
+        'Last broadcast: <b style="color:#e2e8f0">' + lastAt + '</b> | ' +
+        'Sent: <b style="color:#e2e8f0">' + (status ? status.lastSent : 0) + ' / ' + (status ? status.lastTotal : 0) + '</b>' +
+        (running ? ' <span style="color:#f59e0b">(Chal raha hai…)</span>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="row" style="flex-direction:column;gap:10px">' +
+      '<div style="font-weight:700;font-size:14px">Broadcast Message</div>' +
+      '<textarea id="broadcastMsg" rows="5" ' +
+        'style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;' +
+        'color:#e2e8f0;padding:10px;font:inherit;resize:vertical" ' +
+        'placeholder="Yahan apna daily message likhein…">' + msgVal + '</textarea>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn btn-primary" onclick="setMessage()">✓ Message Save Karo</button>' +
+        '<button class="btn btn-warn" onclick="sendBroadcastNow()">🚀 Abhi Bhejo (Manual)</button>' +
+        '<button class="btn btn-ghost" onclick="loadBroadcastStatus()">↻ Refresh Status</button>' +
+      '</div>' +
+    '</div>';
+}
+
+async function botApi(path, opts) {
+  opts = opts || {};
+  if (!botUrl) { toast('Pehle Bot URL save karo'); return null; }
+  if (!opts.headers) opts.headers = {};
+  opts.headers['X-Bot-Key'] = key;
+  if (opts.body) opts.headers['Content-Type'] = 'application/json';
+  const r = await fetch(botUrl.replace(/\/+$/, '') + path, opts);
+  const data = await r.json().catch(function(){ return {}; });
+  if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+  return data;
+}
+
+async function loadBroadcastStatus() {
+  try {
+    const status = await botApi('/broadcast/status');
+    if (status) renderBroadcast(status);
+  } catch(e) {
+    $('#panel-broadcast').innerHTML = '<div class="empty">Bot se connect nahi ho pa raha: ' + escapeHtml(e.message) + '<br><small>Bot URL check karo aur ensure karo bot chal raha hai.</small></div>';
+  }
+}
+
+async function setMessage() {
+  const el = $('#broadcastMsg');
+  if (!el) return;
+  const msg = el.value.trim();
+  if (!msg) return toast('Message khaali nahi hona chahiye');
+  try {
+    await botApi('/set-message', { method: 'POST', body: JSON.stringify({ message: msg }) });
+    toast('Message save ho gaya!');
+    loadBroadcastStatus();
+  } catch(e) { toast('Failed: ' + e.message); }
+}
+
+async function sendBroadcastNow() {
+  if (!confirm('Abhi SABHI approved groups mein message bhejein? Har group ke beech 5 second lagenge.')) return;
+  try {
+    await botApi('/broadcast', { method: 'POST' });
+    toast('Broadcast shuru ho gaya! Background mein chal raha hai.');
+    setTimeout(loadBroadcastStatus, 3000);
+  } catch(e) { toast('Failed: ' + e.message); }
+}
+
+
+
+$('#saveBotBtn').addEventListener('click', function() {
+  const u = $('#botUrl').value.trim();
+  if (!u) return toast('Bot URL daalo');
+  botUrl = u;
+  localStorage.setItem(BOT_URL_KEY, botUrl);
+  toast('Bot URL save ho gaya!');
+});
+
+const savedBot = localStorage.getItem(BOT_URL_KEY);
+if (savedBot) { botUrl = savedBot; $('#botUrl').value = savedBot; }
+renderBroadcast(null);
+
 </script>
 </body>
 </html>
