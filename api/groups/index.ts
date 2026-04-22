@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool } from "../_lib/db";
 
-const DEFAULT_LIMIT = 40;
-const MAX_LIMIT = 40;
+const DEFAULT_LIMIT = 42;
+const MAX_LIMIT = 42;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
