@@ -285,12 +285,12 @@
     
     .grid{grid-template-columns: 1fr 1fr; gap:6px}
     .group-card{
-      padding:4px;
-      border-radius:10px;
+      padding:10px;
+      border-radius:12px;
       aspect-ratio: 1 / 1;
       display: flex;
       flex-direction: column;
-      justify-content: flex-start;
+      justify-content: center;
       align-items: center;
       text-align: center;
     }
@@ -657,20 +657,16 @@ function groupCardHTML(g){
         ${dp}
         <div style="min-width:0">
           <p class="group-name">${escapeHtml(name)}${nameUnknown ? ' <span class="name-pending">name pending</span>' : ''}</p>
+          <div class="group-meta"><span class="verified"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> Verified</span>${g.lastSyncedAt ? ` <span class="dot"></span> <span class="synced">updated ${timeAgo(g.lastSyncedAt)}</span>` : ''}</div>
         </div>
       </div>
-      <div class="group-actions" style="margin-top:2px">
+      <div class="group-actions">
         <button class="btn btn-primary" data-join="${g.id}" data-link="${escapeHtml(g.link)}" type="button">Join group</button>
-        <div class="report-row" style="margin-top:4px">
+        <div class="report-row">
           <button class="btn btn-danger" data-report="${g.id}" data-name="${escapeHtml(name)}" type="button">Not Working</button>
           <button class="btn btn-warning" data-msgoff="${g.id}" data-name="${escapeHtml(name)}" type="button">Messages Off</button>
         </div>
       </div>
-      <div class="group-meta" style="margin-top:6px; font-size: 10px;">
-        <span class="verified"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> Verified</span>
-        ${g.lastSyncedAt ? ` <span class="dot"></span> <span class="synced">updated ${timeAgo(g.lastSyncedAt)}</span>` : ''}
-      </div>
-      ${g.description ? `<p class="group-desc" style="display:none">${escapeHtml(g.description)}</p>` : ''}
     </div>`;
 }
 
