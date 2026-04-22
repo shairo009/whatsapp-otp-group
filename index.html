@@ -260,9 +260,9 @@
     .name-pending{font-size:9px;padding:1px 5px;margin-left:4px}
     .group-meta{font-size:11px;margin-top:2px}
     .group-desc{font-size:12px;margin:3px 0 9px}
-    .group-actions{gap:6px}
-    .group-actions .btn{padding:8px 12px;font-size:13px;min-height:36px;border-radius:8px}
-    .report-label{font-size:9.5px;margin:4px 0 -2px}
+    .group-actions{flex-direction:row;gap:6px;align-items:stretch}
+    .group-actions .btn{flex:1 1 0;min-width:0;padding:8px 6px;font-size:12px;min-height:36px;border-radius:8px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+    .report-label{display:none}
     .grid{grid-template-columns:1fr;gap:10px}
     .pager{gap:6px;margin-top:20px}
     .pager .btn{padding:10px 14px;min-height:44px}
