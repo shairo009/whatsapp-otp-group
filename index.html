@@ -797,9 +797,9 @@ loadGroups(1);
 // ── FOOTBALL WALLPAPER LOGIC ────────────────────────────────
 (function() {
     const BALL_COUNT    = 35;
-    const GRAVITY       = 0.003;
-    const BOUNCE_FACTOR = 1.08;
-    const SPEED_LIMIT   = 0.12;
+    const GRAVITY       = 0.002;
+    const BOUNCE_FACTOR = 1.05;
+    const SPEED_LIMIT   = 0.08;
     const ballRadius    = 0.85;
 
     const scene = new THREE.Scene();
@@ -884,15 +884,15 @@ loadGroups(1);
         balls.forEach((b, i) => {
             const vel = b.userData.vel;
 
-            // Mouse Attraction (with slight jitter to prevent clumping)
+            // Mouse Attraction (with heavy jitter to keep them scattered)
             const target = mouseTarget.clone();
-            target.x += (Math.sin(Date.now() * 0.001 + i) * 2);
-            target.y += (Math.cos(Date.now() * 0.0012 + i) * 2);
+            target.x += (Math.sin(Date.now() * 0.0008 + i * 1.5) * 6);
+            target.y += (Math.cos(Date.now() * 0.0007 + i * 1.2) * 5);
 
             const attractDir = target.sub(b.position);
             const dist = attractDir.length();
-            if (dist > 1.0) {
-                attractDir.normalize().multiplyScalar(0.0035);
+            if (dist > 2.0) {
+                attractDir.normalize().multiplyScalar(0.002);
                 vel.add(attractDir);
             }
 
