@@ -53,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result = await client.query(
       `${dedupedCte}
-       ORDER BY (CASE WHEN (name IS NOT NULL OR image_url IS NOT NULL) THEN 0 ELSE 1 END), created_at DESC
+       ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );

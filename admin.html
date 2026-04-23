@@ -118,14 +118,6 @@
     <button class="btn btn-ghost" id="saveBotBtn">Save Bot URL</button>
   </div>
 
-  <div id="ratioBar" class="ratio-bar" style="display:none">
-    <div class="title">Group Ratio — 80% OTP / 20% Other-name</div>
-    <div class="ratio-track"><div class="ratio-fill" id="ratioFill" style="width:0%"></div></div>
-    <div class="ratio-labels">
-      <span id="ratioOtp">OTP: 0</span>
-      <span id="ratioOther">Other: 0 / max 0</span>
-    </div>
-  </div>
 
   <div class="tabs">
     <div class="tab active" data-tab="pending">Pending <span id="cPending" class="badge" style="display:none"></span></div>
@@ -205,21 +197,6 @@ async function loadAll(){
   }
 }
 
-function updateRatioBar(groups){
-  const approved = groups.filter(g=>g.status==='approved');
-  const total = approved.length;
-  if(total === 0){ $('#ratioBar').style.display='none'; return; }
-  const otpCount = approved.filter(g=>g.isOtp).length;
-  const otherCount = total - otpCount;
-  const allowedOther = Math.floor(total * 0.20);
-  const otherPct = (otherCount / total * 100).toFixed(1);
-  const isOver = otherCount > allowedOther;
-  $('#ratioBar').style.display = 'block';
-  $('#ratioFill').style.width = otherPct + '%';
-  $('#ratioFill').className = 'ratio-fill' + (isOver ? ' over' : '');
-  $('#ratioOtp').textContent = `OTP: ${otpCount} (${(otpCount/total*100).toFixed(1)}%)`;
-  $('#ratioOther').textContent = `Other: ${otherCount}/${allowedOther} — ${otherPct}% (max 20%)`;
-}
 
 function renderGroups(groups){
   const pending  = groups.filter(g=>g.status==='pending');
@@ -250,7 +227,6 @@ function renderGroups(groups){
     ? removed.map(g=>groupRow(g,['approve','delete'])).join('')
     : '<div class="empty">No removed groups.</div>';
 
-  updateRatioBar(groups);
 
   document.querySelectorAll('[data-action]').forEach(b=>{
     b.addEventListener('click', ()=>doAction(b.dataset.action, b.dataset.id));
