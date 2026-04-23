@@ -494,7 +494,7 @@ function detectHasMembers(html: string, ogDescription: string | null): boolean {
 }
 
 export function isValidWhatsAppLink(link: string): boolean {
-  return /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{10,}$/.test(link.trim());
+  return /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{10,}(\?.*)?$/.test(link.trim());
 }
 
 export function extractWhatsAppLinks(text: string): string[] {

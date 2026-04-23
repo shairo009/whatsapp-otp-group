@@ -12,10 +12,6 @@ const MAX_LINKS = 500;
 const MAX_ADDS = 40;
 const CONCURRENCY = 2;
 
-const MAX_LINKS = 500;
-const MAX_ADDS = 40;
-const CONCURRENCY = 2;
-
 type ResultItem = {
   link: string;
   status: "added" | "duplicate" | "failed" | "review";
