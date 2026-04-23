@@ -372,9 +372,9 @@
       Up to <strong>40 links per submit</strong>.
     </p>
     <div class="auto-note">
-      <b>Auto-removal rules:</b>
+      <b>Submission rules:</b>
       <ul>
-        <li>Group name must contain <b>"OTP"</b>.</li>
+        <li>Any valid WhatsApp group link is allowed.</li>
         <li><b>Reset / revoked</b> links are not allowed.</li>
         <li><b>"Messages Off"</b> groups will be removed.</li>
       </ul>
@@ -403,6 +403,24 @@
     <button class="btn btn-ghost" id="prevBtn" type="button">← Prev</button>
     <span class="page-info" id="pageInfo">Page 1</span>
     <button class="btn btn-ghost" id="nextBtn" type="button">Next →</button>
+  </div>
+
+
+  <div class="card" style="margin-top:40px; margin-bottom: 40px; background: rgba(255,255,255,0.95)">
+    <h2 style="margin:0 0 15px; font-size:20px; color: var(--teal-900)">Community Comments</h2>
+    
+    <div style="display:grid; gap:12px; margin-bottom:20px">
+      <input type="text" id="commentName" placeholder="Your Name" maxlength="50" style="padding:12px; border:1.5px solid var(--border); border-radius:10px; font-size:14px">
+      <textarea id="commentContent" placeholder="Write your comment here..." maxlength="1000" style="min-height:100px; padding:12px; border:1.5px solid var(--border); border-radius:12px; font-size:14px"></textarea>
+      <button class="btn btn-primary" id="postCommentBtn" style="justify-self:start">Post Comment</button>
+      <div id="commentMsg" class="msg"></div>
+    </div>
+
+    <div id="commentsList">
+      <div id="commentsContainer" style="display:grid; gap:16px">
+        <div class="loading">Loading comments...</div>
+      </div>
+    </div>
   </div>
 
 </main>
@@ -448,6 +466,11 @@ const resultsBox = $('#resultsBox');
 const resultsSummary = $('#resultsSummary');
 const resultsList = $('#resultsList');
 const groupsList = $('#groupsList');
+const commentName = $('#commentName');
+const commentContent = $('#commentContent');
+const postCommentBtn = $('#postCommentBtn');
+const commentMsg = $('#commentMsg');
+const commentsContainer = $('#commentsContainer');
 const liveCount = $('#liveCount');
 const totalPill = $('#totalPill');
 const pager = $('#pager');
@@ -997,6 +1020,81 @@ loadGroups(1);
     }
     animate();
 })();
+
+async function fetchComments() {
+  try {
+    const r = await fetch('/api/comments');
+    if (!r.ok) throw new Error('Failed to load');
+    const data = await r.json();
+    const container = document.getElementById('commentsContainer');
+    if (data.length === 0) {
+      container.innerHTML = '<div class="empty">No comments yet. Be the first to say something!</div>';
+      return;
+    }
+    container.innerHTML = data.map(c => `
+      <div style="background:rgba(255,255,255,0.5); padding:15px; border-radius:12px; border:1px solid rgba(0,0,0,0.05)">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
+          <strong style="color:var(--teal-900); font-size:14px">${escapeHtml(c.name)}</strong>
+          <span style="font-size:11px; color:var(--muted)">${new Date(c.created_at).toLocaleDateString()}</span>
+        </div>
+        <div style="font-size:14px; color:#475569; line-height:1.4">${escapeHtml(c.content)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('commentsContainer').innerHTML = '<div class="msg error">Error loading comments.</div>';
+  }
+}
+
+function escapeHtml(str) {
+  const p = document.createElement('p');
+  p.textContent = str;
+  return p.innerHTML;
+}
+
+document.getElementById('postCommentBtn').addEventListener('click', async () => {
+  const name = document.getElementById('commentName').value.trim();
+  const content = document.getElementById('commentContent').value.trim();
+  const msg = document.getElementById('commentMsg');
+  const btn = document.getElementById('postCommentBtn');
+
+  if (!name || !content) {
+    msg.textContent = 'Please enter both name and comment.';
+    msg.className = 'msg error show';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Posting...';
+  msg.style.display = 'none';
+
+  try {
+    const r = await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content })
+    });
+
+    if (r.ok) {
+      document.getElementById('commentName').value = '';
+      document.getElementById('commentContent').value = '';
+      msg.textContent = 'Comment posted successfully!';
+      msg.className = 'msg success show';
+      fetchComments();
+    } else {
+      const d = await r.json();
+      msg.textContent = d.error || 'Failed to post comment.';
+      msg.className = 'msg error show';
+    }
+  } catch (e) {
+    msg.textContent = 'Network error.';
+    msg.className = 'msg error show';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Post Comment';
+  }
+});
+
+fetchComments();
 </script>
 </body>
 </html>
