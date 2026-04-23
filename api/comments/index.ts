@@ -47,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
         // Replace links in content
-        const linkRe = /https?:\/\/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})/gi;
+        const linkRe = /https?:\/\/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})(\S*)/gi;
         content = content.replace(linkRe, "[Submit your group on our website. Thank you!]");
       }
 

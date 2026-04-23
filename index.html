@@ -1032,7 +1032,7 @@ async function fetchComments() {
       return;
     }
     container.innerHTML = data.map(c => `
-      <div style="background:rgba(255,255,255,0.5); padding:15px; border-radius:12px; border:1px solid rgba(0,0,0,0.05)">
+      <div style="background:rgba(255,255,255,0.1); padding:15px; border-radius:12px; border:1px solid rgba(0,0,0,0.05)">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
           <strong style="color:var(--teal-900); font-size:14px">${escapeHtml(c.name)}</strong>
           <span style="font-size:11px; color:var(--muted)">${new Date(c.created_at).toLocaleDateString()}</span>
