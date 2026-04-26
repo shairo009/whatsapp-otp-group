@@ -1,10 +1,17 @@
 {
   "rewrites": [
     { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/about", "destination": "/about.html" },
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/terms", "destination": "/terms.html" },
+    { "source": "/contact", "destination": "/contact.html" },
+    { "source": "/faq", "destination": "/faq.html" },
     { "source": "/api/groups/preview", "destination": "/api/groups/preview" },
     { "source": "/api/groups/submit", "destination": "/api/groups/submit" },
     { "source": "/api/groups/report", "destination": "/api/groups/report" },
+    { "source": "/api/groups/join", "destination": "/api/groups/join" },
     { "source": "/api/groups", "destination": "/api/groups/index" },
+    { "source": "/api/comments", "destination": "/api/comments" },
     { "source": "/api/admin/groups", "destination": "/api/admin/groups" },
     { "source": "/api/admin/reports", "destination": "/api/admin/reports" },
     { "source": "/api/admin/action", "destination": "/api/admin/action" },
